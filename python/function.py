@@ -123,6 +123,8 @@ class PossibleValueSet(object):
 			self.reg = arch.get_reg_name(value.value)
 		elif value.state == RegisterValueType.ConstantValue:
 			self.value = value.value
+		elif value.state == RegisterValueType.ConstantPointerValue:
+			self.value = value.value
 		elif value.state == RegisterValueType.StackFrameOffset:
 			self.offset = value.value
 		elif value.state == RegisterValueType.SignedRangeValue:
@@ -164,6 +166,8 @@ class PossibleValueSet(object):
 			return "<entry %s>" % self.reg
 		if self.type == RegisterValueType.ConstantValue:
 			return "<const %#x>" % self.value
+		if self.type == RegisterValueType.ConstantPointerValue:
+			return "<const ptr %#x>" % self.value
 		if self.type == RegisterValueType.StackFrameOffset:
 			return "<stack frame offset %#x>" % self.offset
 		if self.type == RegisterValueType.SignedRangeValue:
@@ -378,8 +382,9 @@ class Function(object):
 			plat = core.BNGetFunctionPlatform(self.handle)
 			if plat is None:
 				return None
-			self._platform = plat
-			return platform.Platform(None, handle = plat)
+			self._platform = platform.Platform(None, handle = plat)
+			return self._platform
+>>>>>>> 10cf74045e1e2495813597a499dee4fb4baf601f
 
 	@property
 	def start(self):
@@ -1751,6 +1756,7 @@ class InstructionBranch(object):
 class InstructionInfo(object):
 	def __init__(self):
 		self.length = 0
+		self.arch_transition_by_target_addr = False
 		self.branch_delay = False
 		self.branches = []
 

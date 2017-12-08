@@ -935,6 +935,7 @@ extern "C"
 		uint64_t (*getEntryPoint)(void* ctxt);
 		bool (*isExecutable)(void* ctxt);
 		BNEndianness (*getDefaultEndianness)(void* ctxt);
+		bool (*isRelocatable)(void* ctxt);
 		size_t (*getAddressSize)(void* ctxt);
 		bool (*save)(void* ctxt, BNFileAccessor* accessor);
 	};
@@ -972,6 +973,7 @@ extern "C"
 	{
 		size_t length;
 		size_t branchCount;
+		bool archTransitionByTargetAddr;
 		bool branchDelay;
 		BNBranchType branchType[BN_MAX_INSTRUCTION_BRANCHES];
 		uint64_t branchTarget[BN_MAX_INSTRUCTION_BRANCHES];
@@ -1002,6 +1004,7 @@ extern "C"
 		BNEndianness (*getEndianness)(void* ctxt);
 		size_t (*getAddressSize)(void* ctxt);
 		size_t (*getDefaultIntegerSize)(void* ctxt);
+		size_t (*getInstructionAlignment)(void* ctxt);
 		size_t (*getMaxInstructionLength)(void* ctxt);
 		size_t (*getOpcodeDisplayLength)(void* ctxt);
 		BNArchitecture* (*getAssociatedArchitectureByAddress)(void* ctxt, uint64_t* addr);
@@ -1189,6 +1192,7 @@ extern "C"
 	{
 		void* context;
 		bool (*recognizeLowLevelIL)(void* ctxt, BNBinaryView* data, BNFunction* func, BNLowLevelILFunction* il);
+		bool (*recognizeMediumLevelIL)(void* ctxt, BNBinaryView* data, BNFunction* func, BNMediumLevelILFunction* il);
 	};
 
 	struct BNTypeParserResult
@@ -1777,6 +1781,7 @@ extern "C"
 	BINARYNINJACOREAPI BNPlatform* BNGetDefaultPlatform(BNBinaryView* view);
 	BINARYNINJACOREAPI void BNSetDefaultPlatform(BNBinaryView* view, BNPlatform* platform);
 	BINARYNINJACOREAPI BNEndianness BNGetDefaultEndianness(BNBinaryView* view);
+	BINARYNINJACOREAPI bool BNIsRelocatable(BNBinaryView* view);
 	BINARYNINJACOREAPI size_t BNGetViewAddressSize(BNBinaryView* view);
 
 	BINARYNINJACOREAPI bool BNIsViewModified(BNBinaryView* view);
@@ -1944,6 +1949,7 @@ extern "C"
 	BINARYNINJACOREAPI BNEndianness BNGetArchitectureEndianness(BNArchitecture* arch);
 	BINARYNINJACOREAPI size_t BNGetArchitectureAddressSize(BNArchitecture* arch);
 	BINARYNINJACOREAPI size_t BNGetArchitectureDefaultIntegerSize(BNArchitecture* arch);
+	BINARYNINJACOREAPI size_t BNGetArchitectureInstructionAlignment(BNArchitecture* arch);
 	BINARYNINJACOREAPI size_t BNGetArchitectureMaxInstructionLength(BNArchitecture* arch);
 	BINARYNINJACOREAPI size_t BNGetArchitectureOpcodeDisplayLength(BNArchitecture* arch);
 	BINARYNINJACOREAPI BNArchitecture* BNGetAssociatedArchitectureByAddress(BNArchitecture* arch, uint64_t* addr);
@@ -3181,6 +3187,8 @@ extern "C"
 	BINARYNINJACOREAPI BNMetadata* BNBinaryViewQueryMetadata(BNBinaryView* view, const char* key);
 	BINARYNINJACOREAPI void BNBinaryViewRemoveMetadata(BNBinaryView* view, const char* key);
 
+	BINARYNINJACOREAPI char* BNGetLinuxCADirectory();
+	BINARYNINJACOREAPI char* BNGetLinuxCABundlePath();
 #ifdef __cplusplus
 }
 #endif
