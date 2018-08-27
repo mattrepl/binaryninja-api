@@ -22,18 +22,17 @@ The previous tools are used in the generation of our documentation, but are not 
 
 * Core
     - [discount] ([discount license] - BSD)
-    - [libcurl] ([libcurl license] - MIT/X derivative)
     - [libgit2] ([libgit2 license] - GPLv2 with linking exception)
     - [libmspack] ([libmspack license] - LGPL, v2)
     - [llvm] ([llvm license] - BSD-style)
     - [lzf] ([lzf license] - BSD)
     - [jemalloc] ([jemalloc license] - BSD)
-    - [openssl] ([openssl license] - openssl license)
     - [sqlite] ([sqlite license] - public domain)
     - [zlib] ([zlib license] - zlib license)
 
 * Other
     - [yasm] ([yasm license] - 2-clause BSD) used for assembling x86 and x64
+    - [xed] ([xed license] - Apache License 2.0) used for disassembling x86, x64, and x16
     - [capstone] ([capstone license] - 3-clause BSD) used in the PPC architecture module as an example of how to wrap an external disassembler
 
 * Upvector update library
@@ -42,12 +41,12 @@ The previous tools are used in the generation of our documentation, but are not 
 
 ## Building Qt
 
-Binary Ninja uses [Qt 5.6] under an LGPLv3 license which requires that we host the original sources used to build Qt for our application along with instructions on how that source may be re-built and can replace the version of Qt shipped with Binary Ninja.
+Binary Ninja uses [Qt 5.10] under an LGPLv3 license which requires that we host the original sources used to build Qt for our application along with instructions on how that source may be re-built and can replace the version of Qt shipped with Binary Ninja.
 
 Please note that we offer no support for running Binary Ninja with modified Qt libraries.
 
 1. Follow the installation requirements on the [Building Qt 5 from Git] page.
-2. Download the Qt 5.6.0 [tarball] from binary.ninja. (Note this is an unmodified 5.6 identical to that available from Qt's source control, but must be hosted locally according to the [Qt 5.6] terms.)
+2. Download the Qt 5.10.1 [tarball] from binary.ninja. (Note this is an unmodified 5.10 identical to that available from Qt's source control, but must be hosted locally according to the [Qt 5.10] terms.)
 3. Next, build QT using the aforementioned instructions.
 4. On OS X, you will need to disable the code-signing signature since it would otherwise prevent changes to binaries or shared libraries.  We recommend a tool such as [unsign].
 5. Finally, replace the built libraries:
@@ -56,7 +55,7 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
      - On Linux, replace the `libQt5Core.so.5`, `libQt5DBus.so.5`, `libQt5Gui.so.5`, `libQt5Network.so.5`, `libQt5Widgets.so.5`, `libQt5XcbQpa.so.5` files wherever Binary Ninja was extracted
 
 [Building Qt 5 from Git]: https://wiki.qt.io/Building-Qt-5-from-Git
-[Qt 5.6]: https://www.qt.io/qt-licensing-terms/
+[Qt 5.10]: https://www.qt.io/qt-licensing-terms/
 [capstone]: https://github.com/aquynh/capstone
 [capstone license]: https://github.com/aquynh/capstone/blob/master/LICENSE.TXT
 [breathe license]: https://github.com/michaeljones/breathe/blob/master/LICENSE
@@ -69,8 +68,6 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [discount]: http://www.pell.portland.or.us/~orc/Code/discount/
 [doxygen license]: https://github.com/doxygen/doxygen/blob/master/LICENSE
 [doxygen]: http://www.stack.nl/~dimitri/doxygen/
-[libcurl]: https://curl.haxx.se/
-[libcurl license]: https://curl.haxx.se/docs/copyright.html 
 [libgit2]: https://libgit2.github.com/
 [libgit2 license]: https://github.com/libgit2/libgit2/blob/master/COPYING
 [libmspack]: https://www.cabextract.org.uk/libmspack/
@@ -87,8 +84,6 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [mkdocs]: http://www.mkdocs.org/
 [opensans license]: http://www.apache.org/licenses/LICENSE-2.0.html
 [opensans]: https://www.google.com/fonts/specimen/Open+Sans
-[openssl license]: https://www.openssl.org/source/license.html
-[openssl]: https://www.openssl.org/
 [qt license]: https://www.qt.io/qt-licensing-terms/
 [qt]: https://www.qt.io/download/
 [sourcecodepro license]:  https://github.com/adobe-fonts/source-code-pro/blob/master/LICENSE.txt
@@ -97,11 +92,13 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [sphinx]: http://www.sphinx-doc.org/en/stable/index.html
 [sqlite license]: https://www.sqlite.org/copyright.html
 [sqlite]: https://www.sqlite.org/index.html
-[tarball]: https://binary.ninja/qt5.6.0.tar.xz
+[tarball]: https://binary.ninja/qt5.10.1.tar.xz
 [tomcrypt license]: https://github.com/libtom/libtomcrypt/blob/develop/LICENSE
 [tomcrypt]:  https://github.com/libtom/libtomcrypt
 [unsign]: https://github.com/steakknife/unsign
 [yasm license]: https://github.com/yasm/yasm/blob/master/BSD.txt
 [yasm]: http://yasm.tortall.net/
+[xed]: http://www.github.com/intelxed/xed/
+[xed license]: http://www.github.com/intelxed/xed/blob/master/LICENSE
 [zlib license]: http://www.zlib.net/zlib_license.html
 [zlib]: http://www.zlib.net/

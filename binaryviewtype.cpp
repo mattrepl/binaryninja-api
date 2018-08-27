@@ -29,6 +29,8 @@ BNBinaryView* BinaryViewType::CreateCallback(void* ctxt, BNBinaryView* data)
 	BinaryViewType* type = (BinaryViewType*)ctxt;
 	Ref<BinaryView> view = new BinaryView(BNNewViewReference(data));
 	Ref<BinaryView> result = type->Create(view);
+	if (!result)
+		return nullptr;
 	return BNNewViewReference(result->GetObject());
 }
 
@@ -83,6 +85,7 @@ vector<Ref<BinaryViewType>> BinaryViewType::GetViewTypes()
 	types = BNGetBinaryViewTypes(&count);
 
 	vector<Ref<BinaryViewType>> result;
+	result.reserve(count);
 	for (size_t i = 0; i < count; i++)
 		result.push_back(new CoreBinaryViewType(types[i]));
 
@@ -98,6 +101,7 @@ vector<Ref<BinaryViewType>> BinaryViewType::GetViewTypesForData(BinaryView* data
 	types = BNGetBinaryViewTypesForData(data->GetObject(), &count);
 
 	vector<Ref<BinaryViewType>> result;
+	result.reserve(count);
 	for (size_t i = 0; i < count; i++)
 		result.push_back(new CoreBinaryViewType(types[i]));
 

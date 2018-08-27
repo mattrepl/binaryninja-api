@@ -26,14 +26,15 @@ import threading
 import abc
 import sys
 
-# Binary Ninja Components
-import _binaryninjacore as core
-from enums import ScriptingProviderExecuteResult, ScriptingProviderInputReadyState
-import binaryview
-import function
-import basicblock
-import startup
-import log
+# Binary Ninja components
+import binaryninja
+from binaryninja import _binaryninjacore as core
+from binaryninja.enums import ScriptingProviderExecuteResult, ScriptingProviderInputReadyState
+from binaryninja import log
+
+# 2-3 compatibility
+from binaryninja import range
+from binaryninja import with_metaclass
 
 
 class _ThreadActionContext(object):
@@ -42,14 +43,14 @@ class _ThreadActionContext(object):
 	def __init__(self, func):
 		self.func = func
 		self.interpreter = None
-		if "value" in dir(PythonScriptingInstance._interpreter):
+		if hasattr(PythonScriptingInstance._interpreter, "value"):
 			self.interpreter = PythonScriptingInstance._interpreter.value
 		self.__class__._actions.append(self)
 		self.callback = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(lambda ctxt: self.execute())
 
 	def execute(self):
 		old_interpreter = None
-		if "value" in dir(PythonScriptingInstance._interpreter):
+		if hasattr(PythonScriptingInstance._interpreter, "value"):
 			old_interpreter = PythonScriptingInstance._interpreter.value
 		PythonScriptingInstance._interpreter.value = self.interpreter
 		try:
@@ -135,7 +136,7 @@ class ScriptingInstance(object):
 	def _set_current_binary_view(self, ctxt, view):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle = core.BNNewViewReference(view))
+				view = binaryninja.binaryview.BinaryView(handle = core.BNNewViewReference(view))
 			else:
 				view = None
 			self.perform_set_current_binary_view(view)
@@ -145,12 +146,12 @@ class ScriptingInstance(object):
 	def _set_current_function(self, ctxt, func):
 		try:
 			if func:
-				func = function.Function(binaryview.BinaryView(handle = core.BNGetFunctionData(func)), core.BNNewFunctionReference(func))
+				func = binaryninja.function.Function(binaryninja.binaryview.BinaryView(handle = core.BNGetFunctionData(func)), core.BNNewFunctionReference(func))
 			else:
 				func = None
 			self.perform_set_current_function(func)
 		except:
-			log.log.log_error(traceback.format_exc())
+			log.log_error(traceback.format_exc())
 
 	def _set_current_basic_block(self, ctxt, block):
 		try:
@@ -159,7 +160,7 @@ class ScriptingInstance(object):
 				if func is None:
 					block = None
 				else:
-					block = basicblock.BasicBlock(binaryview.BinaryView(handle = core.BNGetFunctionData(func)), core.BNNewBasicBlockReference(block))
+					block = binaryninja.basicblock.BasicBlock(binaryninja.binaryview.BinaryView(handle = core.BNGetFunctionData(func)), core.BNNewBasicBlockReference(block))
 					core.BNFreeFunction(func)
 			else:
 				block = None
@@ -256,30 +257,31 @@ class ScriptingInstance(object):
 
 
 class _ScriptingProviderMetaclass(type):
+
 	@property
 	def list(self):
 		"""List all ScriptingProvider types (read-only)"""
-		startup._init_plugins()
+		binaryninja._init_plugins()
 		count = ctypes.c_ulonglong()
 		types = core.BNGetScriptingProviderList(count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append(ScriptingProvider(types[i]))
 		core.BNFreeScriptingProviderList(types)
 		return result
 
 	def __iter__(self):
-		startup._init_plugins()
+		binaryninja._init_plugins()
 		count = ctypes.c_ulonglong()
 		types = core.BNGetScriptingProviderList(count)
 		try:
-			for i in xrange(0, count.value):
+			for i in range(0, count.value):
 				yield ScriptingProvider(types[i])
 		finally:
 			core.BNFreeScriptingProviderList(types)
 
 	def __getitem__(self, value):
-		startup._init_plugins()
+		binaryninja._init_plugins()
 		provider = core.BNGetScriptingProviderByName(str(value))
 		if provider is None:
 			raise KeyError("'%s' is not a valid scripting provider" % str(value))
@@ -292,8 +294,7 @@ class _ScriptingProviderMetaclass(type):
 			raise AttributeError("attribute '%s' is read only" % name)
 
 
-class ScriptingProvider(object):
-	__metaclass__ = _ScriptingProviderMetaclass
+class ScriptingProvider(with_metaclass(_ScriptingProviderMetaclass, object)):
 
 	name = None
 	instance_class = None
@@ -303,6 +304,12 @@ class ScriptingProvider(object):
 		if handle is not None:
 			self.handle = core.handle_of_type(handle, core.BNScriptingProvider)
 			self.__dict__["name"] = core.BNGetScriptingProviderName(handle)
+
+	@property
+	def list(self):
+		"""Allow tab completion to discover metaclass list property"""
+		pass
+
 
 	def register(self):
 		self._cb = core.BNScriptingProviderCallbacks()
@@ -380,7 +387,7 @@ class _PythonScriptingInstanceOutput(object):
 
 	def write(self, data):
 		interpreter = None
-		if "value" in dir(PythonScriptingInstance._interpreter):
+		if hasattr(PythonScriptingInstance._interpreter, "value"):
 			interpreter = PythonScriptingInstance._interpreter.value
 
 		if interpreter is None:
@@ -419,7 +426,7 @@ class _PythonScriptingInstanceInput(object):
 
 	def read(self, size):
 		interpreter = None
-		if "value" in dir(PythonScriptingInstance._interpreter):
+		if hasattr(PythonScriptingInstance._interpreter, "value"):
 			interpreter = PythonScriptingInstance._interpreter.value
 
 		if interpreter is None:
@@ -434,7 +441,7 @@ class _PythonScriptingInstanceInput(object):
 
 	def readline(self):
 		interpreter = None
-		if "value" in dir(PythonScriptingInstance._interpreter):
+		if hasattr(PythonScriptingInstance._interpreter, "value"):
 			interpreter = PythonScriptingInstance._interpreter.value
 
 		if interpreter is None:
@@ -457,7 +464,7 @@ class PythonScriptingInstance(ScriptingInstance):
 			super(PythonScriptingInstance.InterpreterThread, self).__init__()
 			self.instance = instance
 			self.locals = {"__name__": "__console__", "__doc__": None, "binaryninja": sys.modules[__name__]}
-			self.interpreter = code.InteractiveInterpreter(self.locals)
+			self.interpreter = code.InteractiveConsole(self.locals)
 			self.event = threading.Event()
 			self.daemon = True
 
@@ -484,7 +491,7 @@ class PythonScriptingInstance(ScriptingInstance):
 			self.code = None
 			self.input = ""
 
-			self.interpreter.runsource("from binaryninja import *\n")
+			self.interpreter.push("from binaryninja import *")
 
 		def execute(self, code):
 			self.code = code
@@ -540,14 +547,15 @@ class PythonScriptingInstance(ScriptingInstance):
 						self.locals["current_address"] = self.active_addr
 						self.locals["here"] = self.active_addr
 						self.locals["current_selection"] = (self.active_selection_begin, self.active_selection_end)
-						if self.active_func == None:
+						if self.active_func is None:
 							self.locals["current_llil"] = None
 							self.locals["current_mlil"] = None
 						else:
 							self.locals["current_llil"] = self.active_func.low_level_il
 							self.locals["current_mlil"] = self.active_func.medium_level_il
 
-						self.interpreter.runsource(code)
+						for line in code.split(b'\n'):
+							self.interpreter.push(line.decode('charmap'))
 
 						if self.locals["here"] != self.active_addr:
 							if not self.active_view.file.navigate(self.active_view.file.view, self.locals["here"]):
@@ -555,6 +563,8 @@ class PythonScriptingInstance(ScriptingInstance):
 						elif self.locals["current_address"] != self.active_addr:
 							if not self.active_view.file.navigate(self.active_view.file.view, self.locals["current_address"]):
 								sys.stderr.write("Address 0x%x is not valid for the current view\n" % self.locals["current_address"])
+						if self.active_view is not None:
+							self.active_view.update_analysis()
 					except:
 						traceback.print_exc()
 					finally:
@@ -602,7 +612,10 @@ class PythonScriptingInstance(ScriptingInstance):
 			return ScriptingProviderExecuteResult.SuccessfulScriptExecution
 
 		try:
-			result = code.compile_command(text)
+			if isinstance(text, str):
+				result = code.compile_command(text)
+			else:
+				result = code.compile_command(text.decode("charmap"))
 		except:
 			result = False
 
@@ -647,6 +660,8 @@ original_stdin = sys.stdin
 original_stdout = sys.stdout
 original_stderr = sys.stderr
 
-sys.stdin = _PythonScriptingInstanceInput(sys.stdin)
-sys.stdout = _PythonScriptingInstanceOutput(sys.stdout, False)
-sys.stderr = _PythonScriptingInstanceOutput(sys.stderr, True)
+def redirect_stdio():
+	sys.stdin = _PythonScriptingInstanceInput(sys.stdin)
+	sys.stdout = _PythonScriptingInstanceOutput(sys.stdout, False)
+	sys.stderr = _PythonScriptingInstanceOutput(sys.stderr, True)
+	sys.excepthook = sys.__excepthook__

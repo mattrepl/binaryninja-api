@@ -85,6 +85,10 @@ Switching views happens multiple ways. In some instances, it's automatic (clicki
  - `h` : Switch to hex view
  - `p` : Create a function
  - `[ESC]` : Navigate backward
+ - `[CMD] [` (OS X) : Navigate backward
+ - `[CMD] ]` (OS X) : Navigate forward
+ - `[CTRL] [` (Windows/Linux) : Navigate backward
+ - `[CTRL] ]` (Windows/Linux) : Navigate forward
  - `[SPACE]` : Toggle between linear view and graph view
  - `g` : Go To Address dialog
  - `n` : Name a symbol
@@ -92,7 +96,7 @@ Switching views happens multiple ways. In some instances, it's automatic (clicki
  - `e` : Edits an instruction (by modifying the original binary -- currently only enabled for x86, and x64)
  - `x` : Focuses the cross-reference pane
  - `;` : Adds a comment
- - `i` : Switches between disassembly and low-level il in graph view
+ - `i` : Cycles between disassembly, low-level il, and medium-level il in graph view
  - `y` : Change type
  - `a` : Change the data type to an ASCII string
  - [1248] : Change type directly to a data variable of the indicated widths
@@ -210,15 +214,15 @@ By default the interactive python prompt has a number of convenient helper funct
 - `bv` / `current_view` / : the current [BinaryView](https://api.binary.ninja/binaryninja.BinaryView.html)
 - `current_function`: the current [Function](https://api.binary.ninja/binaryninja.Function.html)
 - `current_basic_block`: the current [BasicBlock](https://api.binary.ninja/binaryninja.BasicBlock.html)
-- `current_llil`: the current [LowLevelILBasicBlock](https://api.binary.ninja/binaryninja.lowlevelil.LowLevelILBasicBlock.html)
-- `current_mlil`: the current [MediumLevelILBasicBlock](https://api.binary.ninja/binaryninja.mediumlevelil.MediumLevelILBasicBlock.html)
+- `current_llil`: the current [LowLevelILFunction](https://api.binary.ninja/binaryninja.lowlevelil.LowLevelILFunction.html)
+- `current_mlil`: the current [MediumLevelILFunction](https://api.binary.ninja/binaryninja.mediumlevelil.MediumLevelILFunction.html)
 - `current_selection`: a tuple of the start and end addresses of the current selection
 - `write_at_cursor(data)`: function that writes data to the start of the current selection
 - `get_selected_data()`: function that returns the data in the current selection
 
 Note
 !!! Tip "Note"
-    The current script console only supports Python at the moment, but it's fully extensible for other programming languages for advanced users who with to implement their own bindings.
+    The current script console only supports Python at the moment, but it's fully extensible for other programming languages for advanced users who wish to implement their own bindings.
 
 ## Using Plugins
 
@@ -253,25 +257,37 @@ On windows, this is achieved through a separate launcher that loads first and re
 
 Settings are stored in the _user_ directory in the file `settings.json`. Each top level object in this file is represents a different plugin.  As of build 860 the following settings are available:
 
-|Plugin | Setting                  | Type         | Default                                        | Description                                                                                   |
-|------:|-------------------------:|-------------:|-----------------------------------------------:|:----------------------------------------------------------------------------------------------|
-| ui    | activeContent            | boolean      | True                                           | Allow Binary Ninja to connect to the web to check for updates                                 |
-| ui    | colorblind               | boolean      | True                                           | Choose colors that are visible to those with red/green colorblind                             |
-| ui    | debug                    | boolean      | False                                          | Enable developer debugging features (Additional views: Lifted IL, and SSA forms)              |
-| pdb   | local-store-absolute     | string       | ""                                             | Absolute path specifying where the pdb symbol store exists on this machine, overrides relative path |
-| pdb   | local-store-relative     | string       | "symbols"                                      | Path *relative* to the binaryninja _user_ directory, sepcifying the pdb symbol store            |
-| pdb   | auto-download-pdb        | boolean      | True                                           | Automatically download pdb files from specified symbol servers                                |
-| pdb   | symbol-server-list       | list(string) | ["http://msdl.microsoft.com/download/symbols"] | List of servers to query for pdb symbols.                                                     |
+|Plugin     | Setting                  | Type         | Default                                        | Description                                                                                   |
+|----------:|-------------------------:|-------------:|-----------------------------------------------:|:----------------------------------------------------------------------------------------------|
+| analysis  | autorunLinearSweep       | boolean      | True                                           | Automatically run linear sweep when opening a binary for analysis                             |
+| analysis  | enabledUnicodeBlocks     | list(string) | []                                             | Defines which Unicode blocks to consider when searching for strings                           |
+| analysis  | enableUTF8               | boolean      | True                                           | Whether or not to consider UTF-8 code points when searching for strings                       |
+| analysis  | enableUTF16              | boolean      | True                                           | Whether or not to consider UTF-16 code points when searching for strings                      |
+| analysis  | enableUTF32              | boolean      | True                                           | Whether or not to consider UTF-32 code points when searching for strings                      |
+| analysis  | max-function-size        | integer      | 65536                                          | Any functions over this size will not be automatically analyzed and require manual override   |
+| core      | linux\_ca\_bundle        | string       | ""                                             | Certificate authority (.pem or .crt) file to be used for secure downloads                     |
+| core      | linux\_ca\_dir           | string       | ""                                             | Certificate authority directory (for distributions without a CA bundle)                       |
+| ui        | activeContent            | boolean      | True                                           | Allow Binary Ninja to connect to the web to check for updates                                 |
+| ui        | colorblind               | boolean      | True                                           | Choose colors that are visible to those with red/green colorblind                             |
+| ui        | debug                    | boolean      | False                                          | Enable developer debugging features (Additional views: Lifted IL, and SSA forms)              |
+| ui        | recent-file-limit        | integer      | 10                                             | Specify limit for number of recent files                                                      |
+| ui        | scriptingProvider        | string       | "Python"                                       | Specify the registered ScriptingProvider that controls the 'Console' in the UI                |
+| pdb       | local-store-absolute     | string       | ""                                             | Absolute path specifying where the pdb symbol store exists on this machine, overrides relative path |
+| pdb       | local-store-relative     | string       | "symbols"                                      | Path *relative* to the binaryninja _user_ directory, sepcifying the pdb symbol store          |
+| pdb       | auto-download-pdb        | boolean      | True                                           | Automatically download pdb files from specified symbol servers                                |
+| pdb       | symbol-server-list       | list(string) | ["http://msdl.microsoft.com/download/symbols"] | List of servers to query for pdb symbols.                                                     |
+| python    | interpreter              | string       | "python27.{dylib,dll,so.1}"                    | Python interpreter to load if one is not already present when plugins are loaded              |
 
 Below is an example `settings.json` setting various options:
 ```
 {
-	"ui" :
-	{
-		"activeContent" : false,
-		"colorblind" : false,
-		"debug" : true
-	}
+    "ui" :
+    {
+        "activeContent" : false,
+        "colorblind" : false,
+        "debug" : true
+        "recent-file-limit" : 10
+    }
     "pdb" :
     {
         "local-store-absolute" : "C:\Symbols",
@@ -280,6 +296,11 @@ Below is an example `settings.json` setting various options:
     }
 }
 ```
+
+## Unicode Support
+
+Currently, Unicode support for Big Endian strings is very limited. Also, UTF-16 only supports Basic Latin code points.
+
 ## Getting Support
 
 Vector 35 offers a number of ways to get Binary Ninja [support](https://binary.ninja/support/).
