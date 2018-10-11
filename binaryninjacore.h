@@ -64,6 +64,8 @@
 #define LLIL_GET_TEMP_REG_INDEX(n)  ((n) & 0x7fffffff)
 #define BN_INVALID_REGISTER         0xffffffff
 
+#define BN_AUTOCOERCE_EXTERN_PTR    0xfffffffd
+#define BN_NOCOERCE_EXTERN_PTR      0xfffffffe
 #define BN_INVALID_OPERAND          0xffffffff
 
 #define BN_INVALID_EXPR             ((size_t)-1)
@@ -95,6 +97,9 @@
 #define BN_FULL_CONFIDENCE      255
 #define BN_MINIMUM_CONFIDENCE   1
 #define BN_HEURISTIC_CONFIDENCE 192
+
+#define DEFAULT_INTERNAL_NAMESPACE "BNINTERNALNAMESPACE"
+#define DEFAULT_EXTERNAL_NAMESPACE "BNEXTERNALNAMESPACE"
 
 #ifdef __cplusplus
 extern "C"
@@ -146,6 +151,11 @@ extern "C"
 	struct BNRepositoryManager;
 	struct BNMetadata;
 	struct BNReportCollection;
+	struct BNRelocation;
+	struct BNSegment;
+	struct BNSection;
+	struct BNRelocationInfo;
+	struct BNRelocationHandler;
 
 	typedef bool (*BNLoadPluginCallback)(const char* repoPath, const char* pluginPath, void* ctx);
 
@@ -221,7 +231,8 @@ extern "C"
 		KeywordToken = 19,
 		TypeNameToken = 20,
 		FieldNameToken = 21,
-
+		NameSpaceToken = 22,
+		NameSpaceSeparatorToken = 23,
 		// The following are output by the analysis system automatically, these should
 		// not be used directly by the architecture plugins
 		CodeSymbolToken = 64,
@@ -229,7 +240,8 @@ extern "C"
 		LocalVariableToken = 66,
 		ImportToken = 67,
 		AddressDisplayToken = 68,
-		IndirectImportToken = 69
+		IndirectImportToken = 69,
+		ExternalSymbolToken = 70
 	};
 
 	enum BNInstructionTextTokenContext
@@ -268,7 +280,16 @@ extern "C"
 		ImportAddressSymbol = 1,
 		ImportedFunctionSymbol = 2,
 		DataSymbol = 3,
-		ImportedDataSymbol = 4
+		ImportedDataSymbol = 4,
+		ExternalSymbol = 5
+	};
+
+	enum BNSymbolBinding
+	{
+		NoBinding,
+		LocalBinding,
+		GlobalBinding,
+		WeakBinding
 	};
 
 	enum BNActionType
@@ -299,6 +320,7 @@ extern "C"
 		LLIL_REG_STACK_FREE_REL, // Not valid in SSA from (see LLIL_REG_STACK_FREE_REL_SSA)
 		LLIL_CONST,
 		LLIL_CONST_PTR,
+		LLIL_EXTERN_PTR,
 		LLIL_FLOAT_CONST,
 		LLIL_FLAG, // Not valid in SSA form (see LLIL_FLAG_SSA)
 		LLIL_FLAG_BIT, // Not valid in SSA form (see LLIL_FLAG_BIT_SSA)
@@ -720,6 +742,7 @@ extern "C"
 		EntryValue,
 		ConstantValue,
 		ConstantPointerValue,
+		ExternalPointerValue,
 		StackFrameOffset,
 		ReturnAddressValue,
 		ImportedAddressValue,
@@ -764,6 +787,7 @@ extern "C"
 	{
 		BNRegisterValueType state;
 		int64_t value;
+		int64_t offset;
 	};
 
 	struct BNRegisterValueWithConfidence
@@ -781,6 +805,7 @@ extern "C"
 	{
 		BNRegisterValueType state;
 		int64_t value;
+		int64_t offset;
 		BNValueRange* ranges;
 		int64_t* valueSet;
 		BNLookupTableEntry* table;
@@ -819,6 +844,7 @@ extern "C"
 		MLIL_ADDRESS_OF_FIELD,
 		MLIL_CONST,
 		MLIL_CONST_PTR,
+		MLIL_EXTERN_PTR,
 		MLIL_FLOAT_CONST,
 		MLIL_IMPORT,
 		MLIL_ADD,
@@ -987,9 +1013,24 @@ extern "C"
 		bool (*navigate)(void* ctxt, const char* view, uint64_t offset);
 	};
 
+	struct BNNameList
+	{
+		char** name;
+		char* join;
+		size_t nameCount;
+	};
+
+	struct BNNameSpace
+	{
+		char** name;
+		char* join;
+		size_t nameCount;
+	};
+
 	struct BNQualifiedName
 	{
 		char** name;
+		char* join;
 		size_t nameCount;
 	};
 
@@ -1044,6 +1085,8 @@ extern "C"
 		bool (*isRelocatable)(void* ctxt);
 		size_t (*getAddressSize)(void* ctxt);
 		bool (*save)(void* ctxt, BNFileAccessor* accessor);
+		void (*defineRelocation) (void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target, uint64_t reloc);
+		void (*defineSymbolRelocation) (void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* target, uint64_t reloc);
 	};
 
 	struct BNCustomBinaryViewType
@@ -1084,6 +1127,38 @@ extern "C"
 		BNBranchType branchType[BN_MAX_INSTRUCTION_BRANCHES];
 		uint64_t branchTarget[BN_MAX_INSTRUCTION_BRANCHES];
 		BNArchitecture* branchArch[BN_MAX_INSTRUCTION_BRANCHES]; // If null, same architecture as instruction
+	};
+
+	enum BNRelocationType
+	{
+		ELFGlobalRelocationType,
+		ELFCopyRelocationType,
+		ELFJumpSlotRelocationType,
+		StandardRelocationType,
+		IgnoredRelocation
+	};
+	#define MAX_RELOCATION_SIZE 8
+	struct BNRelocationInfo
+	{
+		BNRelocationType type; // BinaryNinja Relocation Type
+		bool pcRelative;       // PC Relative or Absolute (subtract address from relocation)
+		bool baseRelative;   // Relative to start of module (Add module base to relocation)
+		uint64_t base;       // Base address for this binary view
+		size_t size;         // Size of the data to be written
+		size_t truncateSize; // After addition/subtraction truncate to
+		uint64_t nativeType; // Base type from relocation entry
+		size_t addend;       // Addend value from relocation entry
+		bool hasSign;        // Addend should be subtracted
+		bool implicitAddend; // Addend should be read from the BinaryView
+		bool external;       // Relocation entry points to external symbol
+		size_t symbolIndex;  // Index into symbol table
+		size_t sectionIndex; // Index into the section table
+		uint64_t address;    // Absolute address or segment offset
+		uint64_t target;     // Target (set automatically)
+		bool dataRelocation; // This relocation is effecting data not code
+		uint8_t relocationDataCache[MAX_RELOCATION_SIZE];
+		struct BNRelocationInfo* prev; // Link to relocation another related relocation
+		struct BNRelocationInfo* next; // Link to relocation another related relocation
 	};
 
 	struct BNInstructionTextToken
@@ -1371,6 +1446,19 @@ extern "C"
 		void* context;
 		bool (*recognizeLowLevelIL)(void* ctxt, BNBinaryView* data, BNFunction* func, BNLowLevelILFunction* il);
 		bool (*recognizeMediumLevelIL)(void* ctxt, BNBinaryView* data, BNFunction* func, BNMediumLevelILFunction* il);
+	};
+
+	struct BNCustomRelocationHandler
+	{
+		void* context;
+		void (*freeObject)(void* ctxt);
+
+		bool (*getRelocationInfo)(void* ctxt, BNBinaryView* view, BNArchitecture* arch, BNRelocationInfo* result,
+			size_t resultCount);
+		bool (*applyRelocation)(void* ctxt, BNBinaryView* view, BNArchitecture* arch, BNRelocation* reloc, uint8_t* dest,
+			size_t len);
+		size_t (*getOperandForExternalRelocation)(void* ctxt, const uint8_t* data, uint64_t addr, size_t length,
+			BNLowLevelILFunction* il, BNRelocation* relocation);
 	};
 
 	struct BNTypeParserResult
@@ -1743,33 +1831,13 @@ extern "C"
 		SegmentDenyExecute = 0x40
 	};
 
-	struct BNSegment
-	{
-		uint64_t start, length;
-		uint64_t dataOffset, dataLength;
-		uint32_t flags;
-		bool autoDefined;
-	};
-
 	enum BNSectionSemantics
 	{
 		DefaultSectionSemantics,
 		ReadOnlyCodeSectionSemantics,
 		ReadOnlyDataSectionSemantics,
-		ReadWriteDataSectionSemantics
-	};
-
-	struct BNSection
-	{
-		char* name;
-		char* type;
-		uint64_t start, length;
-		char* linkedSection;
-		char* infoSection;
-		uint64_t infoData;
-		uint64_t align, entrySize;
-		BNSectionSemantics semantics;
-		bool autoDefined;
+		ReadWriteDataSectionSemantics,
+		ExternalSectionSemantics
 	};
 
 	struct BNAddressRange
@@ -1846,6 +1914,12 @@ extern "C"
 		void (*populateNodes)(void* ctxt);
 		void (*completeLayout)(void* ctxt);
 		BNFlowGraph* (*update)(void* ctxt);
+	};
+
+	struct BNRange
+	{
+		uint64_t start;
+		uint64_t end;
 	};
 
 	enum BNAnalysisSkipReason
@@ -2031,6 +2105,7 @@ extern "C"
 	BINARYNINJACOREAPI bool BNIsOffsetExecutable(BNBinaryView* view, uint64_t offset);
 	BINARYNINJACOREAPI bool BNIsOffsetBackedByFile(BNBinaryView* view, uint64_t offset);
 	BINARYNINJACOREAPI bool BNIsOffsetCodeSemantics(BNBinaryView* view, uint64_t offset);
+	BINARYNINJACOREAPI bool BNIsOffsetExternSemantics(BNBinaryView* view, uint64_t offset);
 	BINARYNINJACOREAPI bool BNIsOffsetWritableSemantics(BNBinaryView* view, uint64_t offset);
 	BINARYNINJACOREAPI uint64_t BNGetNextValidOffset(BNBinaryView* view, uint64_t offset);
 	BINARYNINJACOREAPI uint64_t BNGetStartOffset(BNBinaryView* view);
@@ -2051,6 +2126,12 @@ extern "C"
 
 	BINARYNINJACOREAPI bool BNSaveToFile(BNBinaryView* view, BNFileAccessor* file);
 	BINARYNINJACOREAPI bool BNSaveToFilename(BNBinaryView* view, const char* filename);
+	BINARYNINJACOREAPI void BNDefineRelocation(BNBinaryView* view, BNArchitecture* arch, BNRelocationInfo* info,
+		uint64_t target, uint64_t reloc);
+	BINARYNINJACOREAPI void BNDefineSymbolRelocation(BNBinaryView* view, BNArchitecture* arch, BNRelocationInfo* info,
+		BNSymbol* target, uint64_t reloc);
+	BINARYNINJACOREAPI BNRange* BNGetRelocationRanges(BNBinaryView* segment, size_t* count);
+	BINARYNINJACOREAPI BNRange* BNGetRelocationRangesAtAddress(BNBinaryView* segment, uint64_t addr, size_t* count);
 
 	BINARYNINJACOREAPI void BNRegisterDataNotification(BNBinaryView* view, BNBinaryDataNotification* notify);
 	BINARYNINJACOREAPI void BNUnregisterDataNotification(BNBinaryView* view, BNBinaryDataNotification* notify);
@@ -2077,9 +2158,9 @@ extern "C"
 	BINARYNINJACOREAPI void BNAddUserSegment(BNBinaryView* view, uint64_t start, uint64_t length,
 		uint64_t dataOffset, uint64_t dataLength, uint32_t flags);
 	BINARYNINJACOREAPI void BNRemoveUserSegment(BNBinaryView* view, uint64_t start, uint64_t length);
-	BINARYNINJACOREAPI BNSegment* BNGetSegments(BNBinaryView* view, size_t* count);
-	BINARYNINJACOREAPI void BNFreeSegmentList(BNSegment* segments);
-	BINARYNINJACOREAPI bool BNGetSegmentAt(BNBinaryView* view, uint64_t addr, BNSegment* result);
+	BINARYNINJACOREAPI BNSegment** BNGetSegments(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI void BNFreeSegmentList(BNSegment** segments, size_t count);
+	BINARYNINJACOREAPI BNSegment* BNGetSegmentAt(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI bool BNGetAddressForDataOffset(BNBinaryView* view, uint64_t offset, uint64_t* addr);
 
 	BINARYNINJACOREAPI void BNAddAutoSection(BNBinaryView* view, const char* name, uint64_t start, uint64_t length,
@@ -2090,13 +2171,18 @@ extern "C"
 		BNSectionSemantics semantics, const char* type, uint64_t align, uint64_t entrySize,
 		const char* linkedSection, const char* infoSection, uint64_t infoData);
 	BINARYNINJACOREAPI void BNRemoveUserSection(BNBinaryView* view, const char* name);
-	BINARYNINJACOREAPI BNSection* BNGetSections(BNBinaryView* view, size_t* count);
-	BINARYNINJACOREAPI BNSection* BNGetSectionsAt(BNBinaryView* view, uint64_t addr, size_t* count);
-	BINARYNINJACOREAPI void BNFreeSectionList(BNSection* sections, size_t count);
-	BINARYNINJACOREAPI bool BNGetSectionByName(BNBinaryView* view, const char* name, BNSection* result);
-	BINARYNINJACOREAPI void BNFreeSection(BNSection* section);
+	BINARYNINJACOREAPI BNSection** BNGetSections(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI BNSection** BNGetSectionsAt(BNBinaryView* view, uint64_t addr, size_t* count);
+	BINARYNINJACOREAPI void BNFreeSectionList(BNSection** sections, size_t count);
+	BINARYNINJACOREAPI BNSection* BNGetSectionByName(BNBinaryView* view, const char* name);
 
 	BINARYNINJACOREAPI char** BNGetUniqueSectionNames(BNBinaryView* view, const char** names, size_t count);
+
+	BINARYNINJACOREAPI BNNameSpace* BNGetNameSpaces(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI void BNFreeNameSpaceList(BNNameSpace* nameSpace, size_t count);
+	BINARYNINJACOREAPI BNNameSpace BNGetExternalNameSpace(BNBinaryView* view);
+	BINARYNINJACOREAPI BNNameSpace BNGetInternalNameSpace(BNBinaryView* view);
+	BINARYNINJACOREAPI void BNFreeNameSpace(BNNameSpace* name);
 
 	BINARYNINJACOREAPI BNAddressRange* BNGetAllocatedRanges(BNBinaryView* view, size_t* count);
 	BINARYNINJACOREAPI void BNFreeAddressRanges(BNAddressRange* ranges);
@@ -2114,7 +2200,6 @@ extern "C"
 	BINARYNINJACOREAPI BNBinaryView* BNCreateCustomBinaryView(const char* name, BNFileMetadata* file,
 		BNBinaryView* parent, BNCustomBinaryView* view);
 
-	// Binary view type management
 	BINARYNINJACOREAPI BNBinaryViewType* BNGetBinaryViewTypeByName(const char* name);
 	BINARYNINJACOREAPI BNBinaryViewType** BNGetBinaryViewTypes(size_t* count);
 	BINARYNINJACOREAPI BNBinaryViewType** BNGetBinaryViewTypesForData(BNBinaryView* data, size_t* count);
@@ -2220,7 +2305,7 @@ extern "C"
 	BINARYNINJACOREAPI size_t BNGetArchitectureOpcodeDisplayLength(BNArchitecture* arch);
 	BINARYNINJACOREAPI BNArchitecture* BNGetAssociatedArchitectureByAddress(BNArchitecture* arch, uint64_t* addr);
 	BINARYNINJACOREAPI bool BNGetInstructionInfo(BNArchitecture* arch, const uint8_t* data, uint64_t addr,
-	                                             size_t maxLen, BNInstructionInfo* result);
+		size_t maxLen, BNInstructionInfo* result);
 	BINARYNINJACOREAPI bool BNGetInstructionText(BNArchitecture* arch, const uint8_t* data, uint64_t addr,
 	                                             size_t* len, BNInstructionTextToken** result, size_t* count);
 	BINARYNINJACOREAPI bool BNGetInstructionLowLevelIL(BNArchitecture* arch, const uint8_t* data, uint64_t addr,
@@ -2299,9 +2384,7 @@ extern "C"
 	BINARYNINJACOREAPI bool BNArchitectureInvertBranch(BNArchitecture* arch, uint8_t* data, uint64_t addr, size_t len);
 	BINARYNINJACOREAPI bool BNArchitectureSkipAndReturnValue(BNArchitecture* arch, uint8_t* data, uint64_t addr,
 	                                                         size_t len, uint64_t value);
-
 	BINARYNINJACOREAPI void BNRegisterArchitectureFunctionRecognizer(BNArchitecture* arch, BNFunctionRecognizer* rec);
-
 	BINARYNINJACOREAPI bool BNIsBinaryViewTypeArchitectureConstantDefined(BNArchitecture* arch, const char* type,
 	                                                                      const char* name);
 	BINARYNINJACOREAPI uint64_t BNGetBinaryViewTypeArchitectureConstant(BNArchitecture* arch, const char* type,
@@ -2309,6 +2392,20 @@ extern "C"
 	BINARYNINJACOREAPI void BNSetBinaryViewTypeArchitectureConstant(BNArchitecture* arch, const char* type,
 	                                                                const char* name, uint64_t value);
 
+	BINARYNINJACOREAPI void BNArchitectureRegisterRelocationHandler(BNArchitecture* arch, const char* viewName,
+		BNRelocationHandler* handler);
+	BINARYNINJACOREAPI BNRelocationHandler* BNCreateRelocationHandler(BNCustomRelocationHandler* handler);
+	BINARYNINJACOREAPI BNRelocationHandler* BNArchitectureGetRelocationHandler(BNArchitecture* arch, const char* viewName);
+	BINARYNINJACOREAPI BNRelocationHandler* BNNewRelocationHandlerReference(BNRelocationHandler* handler);
+	BINARYNINJACOREAPI void BNFreeRelocationHandler(BNRelocationHandler* handler);
+	BINARYNINJACOREAPI bool BNRelocationHandlerGetRelocationInfo(BNRelocationHandler* handler, BNBinaryView* data,
+		BNArchitecture* arch, BNRelocationInfo* info, size_t infoCount);
+	BINARYNINJACOREAPI bool BNRelocationHandlerApplyRelocation(BNRelocationHandler* handler, BNBinaryView* view,
+		BNArchitecture* arch, BNRelocation* reloc, uint8_t* dest, size_t len);
+	BINARYNINJACOREAPI bool BNRelocationHandlerDefaultApplyRelocation(BNRelocationHandler* handler, BNBinaryView* view,
+		BNArchitecture* arch, BNRelocation* reloc, uint8_t* dest, size_t len);
+	BINARYNINJACOREAPI size_t BNRelocationHandlerGetOperandForExternalRelocation(BNRelocationHandler* handler,
+		const uint8_t* data, uint64_t addr, size_t length, const BNLowLevelILFunction* il, BNRelocation* relocation);
 	// Analysis
 	BINARYNINJACOREAPI void BNAddAnalysisOption(BNBinaryView* view, const char* name);
 	BINARYNINJACOREAPI void BNAddFunctionForAnalysis(BNBinaryView* view, BNPlatform* platform, uint64_t addr);
@@ -2730,34 +2827,35 @@ extern "C"
 
 	// Symbols
 	BINARYNINJACOREAPI BNSymbol* BNCreateSymbol(BNSymbolType type, const char* shortName, const char* fullName,
-	                                            const char* rawName, uint64_t addr);
+		const char* rawName, uint64_t addr, BNSymbolBinding binding);
 	BINARYNINJACOREAPI BNSymbol* BNNewSymbolReference(BNSymbol* sym);
 	BINARYNINJACOREAPI void BNFreeSymbol(BNSymbol* sym);
 	BINARYNINJACOREAPI BNSymbolType BNGetSymbolType(BNSymbol* sym);
+	BINARYNINJACOREAPI BNSymbolBinding BNGetSymbolBinding(BNSymbol* sym);
+	BINARYNINJACOREAPI BNNameSpace BNGetSymbolNameSpace(BNSymbol* sym);
 	BINARYNINJACOREAPI char* BNGetSymbolShortName(BNSymbol* sym);
 	BINARYNINJACOREAPI char* BNGetSymbolFullName(BNSymbol* sym);
 	BINARYNINJACOREAPI char* BNGetSymbolRawName(BNSymbol* sym);
 	BINARYNINJACOREAPI uint64_t BNGetSymbolAddress(BNSymbol* sym);
 	BINARYNINJACOREAPI bool BNIsSymbolAutoDefined(BNSymbol* sym);
-	BINARYNINJACOREAPI void BNSetSymbolAutoDefined(BNSymbol* sym, bool val);
 
-	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByAddress(BNBinaryView* view, uint64_t addr);
-	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByRawName(BNBinaryView* view, const char* name);
-	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsByName(BNBinaryView* view, const char* name, size_t* count);
-	BINARYNINJACOREAPI BNSymbol** BNGetSymbols(BNBinaryView* view, size_t* count);
-	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsInRange(BNBinaryView* view, uint64_t start, uint64_t len, size_t* count);
-	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsOfType(BNBinaryView* view, BNSymbolType type, size_t* count);
+	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByAddress(BNBinaryView* view, uint64_t addr, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByRawName(BNBinaryView* view, const char* name, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsByName(BNBinaryView* view, const char* name, size_t* count, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI BNSymbol** BNGetSymbols(BNBinaryView* view, size_t* count, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsInRange(BNBinaryView* view, uint64_t start, uint64_t len, size_t* count, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsOfType(BNBinaryView* view, BNSymbolType type, size_t* count, const BNNameSpace* nameSpace);
 	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsOfTypeInRange(BNBinaryView* view, BNSymbolType type,
-	                                                        uint64_t start, uint64_t len, size_t* count);
+	                                                        uint64_t start, uint64_t len, size_t* count, const BNNameSpace* nameSpace);
 	BINARYNINJACOREAPI void BNFreeSymbolList(BNSymbol** syms, size_t count);
 
-	BINARYNINJACOREAPI void BNDefineAutoSymbol(BNBinaryView* view, BNSymbol* sym);
-	BINARYNINJACOREAPI void BNUndefineAutoSymbol(BNBinaryView* view, BNSymbol* sym);
-	BINARYNINJACOREAPI void BNDefineUserSymbol(BNBinaryView* view, BNSymbol* sym);
-	BINARYNINJACOREAPI void BNUndefineUserSymbol(BNBinaryView* view, BNSymbol* sym);
+	BINARYNINJACOREAPI void BNDefineAutoSymbol(BNBinaryView* view, BNSymbol* sym, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI void BNUndefineAutoSymbol(BNBinaryView* view, BNSymbol* sym, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI void BNDefineUserSymbol(BNBinaryView* view, BNSymbol* sym, const BNNameSpace* nameSpace);
+	BINARYNINJACOREAPI void BNUndefineUserSymbol(BNBinaryView* view, BNSymbol* sym, const BNNameSpace* nameSpace);
 	BINARYNINJACOREAPI void BNDefineImportedFunction(BNBinaryView* view, BNSymbol* importAddressSym, BNFunction* func);
 	BINARYNINJACOREAPI void BNDefineAutoSymbolAndVariableOrFunction(BNBinaryView* view, BNPlatform* platform,
-		BNSymbol* sym, BNType* type);
+		BNSymbol* sym, BNType* type, const BNNameSpace* nameSpace);
 
 	BINARYNINJACOREAPI BNSymbol* BNImportedFunctionFromImportAddressSymbol(BNSymbol* sym, uint64_t addr);
 
@@ -3625,6 +3723,54 @@ extern "C"
 	BINARYNINJACOREAPI BNMetadata* BNBinaryViewQueryMetadata(BNBinaryView* view, const char* key);
 	BINARYNINJACOREAPI void BNBinaryViewRemoveMetadata(BNBinaryView* view, const char* key);
 
+
+	// Relocation object methods
+	BINARYNINJACOREAPI BNRelocation* BNNewRelocationReference(BNRelocation* reloc);
+	BINARYNINJACOREAPI void BNFreeRelocation(BNRelocation* reloc);
+	BINARYNINJACOREAPI BNRelocationInfo BNRelocationGetInfo(BNRelocation* reloc);
+	BINARYNINJACOREAPI BNArchitecture* BNRelocationGetArchitecture(BNRelocation* reloc);
+	BINARYNINJACOREAPI uint64_t BNRelocationGetTarget(BNRelocation* reloc);
+	BINARYNINJACOREAPI uint64_t BNRelocationGetReloc(BNRelocation* reloc);
+	BINARYNINJACOREAPI BNSymbol* BNRelocationGetSymbol(BNRelocation* reloc);
+	// Segment object methods
+	BINARYNINJACOREAPI BNSegment* BNCreateSegment(uint64_t start, uint64_t length, uint64_t dataOffset, uint64_t dataLength, uint32_t flags,
+		bool autoDefined);
+	BINARYNINJACOREAPI BNSegment* BNNewSegmentReference(BNSegment* seg);
+	BINARYNINJACOREAPI void BNFreeSegment(BNSegment* seg);
+
+	BINARYNINJACOREAPI BNRange* BNSegmentGetRelocationRanges(BNSegment* segment, size_t* count);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetRelocationsCount(BNSegment* segment);
+	BINARYNINJACOREAPI BNRange* BNSegmentGetRelocationRangesAtAddress(BNSegment* segment, uint64_t addr, size_t* count);
+	BINARYNINJACOREAPI void BNFreeRelocationRanges(BNRange* ranges);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetStart(BNSegment* segment);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetLength(BNSegment* segment);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetEnd(BNSegment* segment);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetDataEnd(BNSegment* segment);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetDataOffset(BNSegment* segment);
+	BINARYNINJACOREAPI uint64_t BNSegmentGetDataLength(BNSegment* segment);
+	BINARYNINJACOREAPI uint32_t BNSegmentGetFlags(BNSegment* segment);
+	BINARYNINJACOREAPI bool BNSegmentIsAutoDefined(BNSegment* segment);
+	BINARYNINJACOREAPI void BNSegmentSetLength(BNSegment* segment, uint64_t length);
+	BINARYNINJACOREAPI void BNSegmentSetDataOffset(BNSegment* segment, uint64_t dataOffset);
+	BINARYNINJACOREAPI void BNSegmentSetDataLength(BNSegment* segment, uint64_t dataLength);
+	BINARYNINJACOREAPI void BNSegmentSetFlags(BNSegment* segment, uint32_t flags);
+	BINARYNINJACOREAPI size_t BNSegmentRead(BNSegment* segment, BNBinaryView* view, uint8_t* dest, uint64_t offset, size_t len);
+
+	// Section object methods
+	BINARYNINJACOREAPI BNSection* BNNewSectionReference(BNSection* section);
+	BINARYNINJACOREAPI void BNFreeSection(BNSection* section);
+	BINARYNINJACOREAPI char* BNSectionGetName(BNSection* section);
+	BINARYNINJACOREAPI char* BNSectionGetType(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetStart(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetLength(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetEnd(BNSection* section);
+	BINARYNINJACOREAPI char* BNSectionGetLinkedSection(BNSection* section);
+	BINARYNINJACOREAPI char* BNSectionGetInfoSection(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetInfoData(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetAlign(BNSection* section);
+	BINARYNINJACOREAPI uint64_t BNSectionGetEntrySize(BNSection* section);
+	BINARYNINJACOREAPI BNSectionSemantics BNSectionGetSemantics(BNSection* section);
+	BINARYNINJACOREAPI bool BNSectionIsAutoDefined(BNSection* section);
 #ifdef __cplusplus
 }
 #endif

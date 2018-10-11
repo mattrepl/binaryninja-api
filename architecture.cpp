@@ -20,6 +20,7 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
+#include <cstdint>
 #include <inttypes.h>
 #include "binaryninjaapi.h"
 
@@ -140,8 +141,8 @@ BNArchitecture* Architecture::GetAssociatedArchitectureByAddressCallback(void* c
 }
 
 
-bool Architecture::GetInstructionInfoCallback(void* ctxt, const uint8_t* data, uint64_t addr,
-                                              size_t maxLen, BNInstructionInfo* result)
+bool Architecture::GetInstructionInfoCallback(void* ctxt, const uint8_t* data, uint64_t addr, size_t maxLen,
+	BNInstructionInfo* result)
 {
 	Architecture* arch = (Architecture*)ctxt;
 
@@ -1119,6 +1120,17 @@ void Architecture::RegisterFunctionRecognizer(FunctionRecognizer* recog)
 	FunctionRecognizer::RegisterArchitectureFunctionRecognizer(this, recog);
 }
 
+
+void Architecture::RegisterRelocationHandler(const string& viewName, RelocationHandler* handler)
+{
+	BNArchitectureRegisterRelocationHandler(m_object, viewName.c_str(), handler->GetObject());
+}
+
+
+Ref<RelocationHandler> Architecture::GetRelocationHandler(const std::string& viewName)
+{
+	return new CoreRelocationHandler(BNArchitectureGetRelocationHandler(m_object, viewName.c_str()));
+}
 
 bool Architecture::IsBinaryViewTypeConstantDefined(const string& type, const string& name)
 {

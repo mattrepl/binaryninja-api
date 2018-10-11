@@ -171,6 +171,7 @@ unordered_map<BNLowLevelILOperation, vector<LowLevelILOperandUsage>>
 		{LLIL_MEM_PHI, {DestMemoryVersionLowLevelOperandUsage, SourceMemoryVersionsLowLevelOperandUsage}},
 		{LLIL_CONST, {ConstantLowLevelOperandUsage}},
 		{LLIL_CONST_PTR, {ConstantLowLevelOperandUsage}},
+		{LLIL_EXTERN_PTR, {ConstantLowLevelOperandUsage, OffsetLowLevelOperandUsage}},
 		{LLIL_FLOAT_CONST, {ConstantLowLevelOperandUsage}},
 		{LLIL_ADD, {LeftExprLowLevelOperandUsage, RightExprLowLevelOperandUsage}},
 		{LLIL_SUB, {LeftExprLowLevelOperandUsage, RightExprLowLevelOperandUsage}},
@@ -2113,6 +2114,8 @@ ExprId LowLevelILInstruction::CopyTo(LowLevelILFunction* dest,
 		return dest->Const(size, GetConstant<LLIL_CONST>(), *this);
 	case LLIL_CONST_PTR:
 		return dest->ConstPointer(size, GetConstant<LLIL_CONST_PTR>(), *this);
+	case LLIL_EXTERN_PTR:
+		return dest->ExternPointer(size, GetConstant<LLIL_EXTERN_PTR>(), GetOffset<LLIL_EXTERN_PTR>(), *this);
 	case LLIL_FLOAT_CONST:
 		return dest->FloatConstRaw(size, GetConstant<LLIL_FLOAT_CONST>(), *this);
 	case LLIL_POP:
@@ -2484,6 +2487,15 @@ int64_t LowLevelILInstruction::GetConstant() const
 {
 	size_t operandIndex;
 	if (GetOperandIndexForUsage(ConstantLowLevelOperandUsage, operandIndex))
+		return GetRawOperandAsInteger(operandIndex);
+	throw LowLevelILInstructionAccessException();
+}
+
+
+uint64_t LowLevelILInstruction::GetOffset() const
+{
+	size_t operandIndex;
+	if (GetOperandIndexForUsage(OffsetLowLevelOperandUsage, operandIndex))
 		return GetRawOperandAsInteger(operandIndex);
 	throw LowLevelILInstructionAccessException();
 }
@@ -2891,6 +2903,12 @@ ExprId LowLevelILFunction::Const(size_t size, uint64_t val, const ILSourceLocati
 ExprId LowLevelILFunction::ConstPointer(size_t size, uint64_t val, const ILSourceLocation& loc)
 {
 	return AddExprWithLocation(LLIL_CONST_PTR, loc, size, 0, val);
+}
+
+
+ExprId LowLevelILFunction::ExternPointer(size_t size, uint64_t val, uint64_t offset, const ILSourceLocation& loc)
+{
+	return AddExprWithLocation(LLIL_EXTERN_PTR, loc, size, 0, val, offset);
 }
 
 

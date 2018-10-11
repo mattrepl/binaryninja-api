@@ -26,7 +26,7 @@ import ctypes
 # Binary Ninja components
 import binaryninja
 from binaryninja import _binaryninjacore as core
-from binaryninja.enums import SymbolType, TypeClass, NamedTypeReferenceClass, InstructionTextTokenType, StructureType, ReferenceType, VariableSourceType
+from binaryninja.enums import SymbolType, SymbolBinding, TypeClass, NamedTypeReferenceClass, InstructionTextTokenType, StructureType, ReferenceType, VariableSourceType
 
 # 2-3 compatibility
 from binaryninja import range
@@ -119,6 +119,26 @@ class QualifiedName(object):
 		return QualifiedName(result)
 
 
+class NameSpace(QualifiedName):
+	def __str__(self):
+		return ":".join(self.name)
+
+	def _get_core_struct(self):
+		result = core.BNNameSpace()
+		name_list = (ctypes.c_char_p * len(self.name))()
+		for i in range(0, len(self.name)):
+			name_list[i] = self.name[i].encode('charmap')
+		result.name = name_list
+		result.nameCount = len(self.name)
+		return result
+
+	@classmethod
+	def _from_core_struct(cls, name):
+		result = []
+		for i in range(0, name.nameCount):
+			result.append(name.name[i])
+		return NameSpace(result)
+
 class Symbol(object):
 	"""
 	Symbols are defined as one of the following types:
@@ -131,9 +151,10 @@ class Symbol(object):
 		ImportedFunctionSymbol      Symbol for Function that is not defined in the current binary
 		DataSymbol                  Symbol for Data in the current binary
 		ImportedDataSymbol          Symbol for Data that is not defined in the current binary
+		ExternalSymbol              Symbols for data and code that reside outside the BinaryView
 		=========================== ==============================================================
 	"""
-	def __init__(self, sym_type, addr, short_name, full_name = None, raw_name = None, handle = None):
+	def __init__(self, sym_type, addr, short_name, full_name=None, raw_name=None, handle=None, binding=None):
 		if handle is not None:
 			self.handle = core.handle_of_type(handle, core.BNSymbol)
 		else:
@@ -143,7 +164,9 @@ class Symbol(object):
 				full_name = short_name
 			if raw_name is None:
 				raw_name = full_name
-			self.handle = core.BNCreateSymbol(sym_type, short_name, full_name, raw_name, addr)
+			if binding is None:
+				binding = SymbolBinding.NoBinding
+			self.handle = core.BNCreateSymbol(sym_type, short_name, full_name, raw_name, addr, binding)
 
 	def __del__(self):
 		core.BNFreeSymbol(self.handle)
@@ -162,6 +185,19 @@ class Symbol(object):
 	def type(self):
 		"""Symbol type (read-only)"""
 		return SymbolType(core.BNGetSymbolType(self.handle))
+
+	@property
+	def binding(self):
+		"""Symbol binding (read-only)"""
+		return SymbolBinding(core.BNGetSymbolBinding(self.handle))
+
+	@property
+	def namespace(self):
+		"""Symbol namespace (read-only)"""
+		ns = core.BNGetSymbolNameSpace(self.handle)
+		result = NameSpace._from_core_struct(ns)
+		core.BNFreeNameSpace(ns)
+		return result
 
 	@property
 	def name(self):
@@ -191,10 +227,6 @@ class Symbol(object):
 	@property
 	def auto(self):
 		return core.BNIsSymbolAutoDefined(self.handle)
-
-	@auto.setter
-	def auto(self, value):
-		core.BNSetSymbolAutoDefined(self.handle, value)
 
 	def __repr__(self):
 		return "<%s: \"%s\" @ %#x>" % (self.type, self.full_name, self.address)

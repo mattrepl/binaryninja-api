@@ -55,7 +55,7 @@ You can load files in many ways:
 3. Clicking an item in the recent files list
 4. Running Binary Ninja with an optional command-line parameter
 5. Opening a file from a URL via the `⌘-l` or `⌃-l` hotkey
-6. Opening a file using the binaryninja: url handler. For security reasons, the url handler requires you to confirm a warning before opening a file via the url handler. The url handler can open remote URLs like: `binaryninja:https://captf.com/2015/plaidctf/pwnable/datastore_7e64104f876f0aa3f8330a409d9b9924.elf`, or even local files like `binarynina://bin/ls` in cases where you wish to script up Binary Ninja from a local webapp.
+6. Opening a file using the binaryninja: url handler. For security reasons, the url handler requires you to confirm a warning before opening a file via the url handler. The url handler can open remote URLs like: `binaryninja:https://captf2.captf.com/2015/plaidctf/pwnable/datastore_7e64104f876f0aa3f8330a409d9b9924.elf`, or even local files like `binarynina://bin/ls` in cases where you wish to script up Binary Ninja from a local webapp.
 
 ![recent files](/img/recent.png "Recent Files")
 
@@ -68,7 +68,7 @@ As soon as you open a file, Binary Ninja begins its auto-analysis.
 
 Even while Binary Ninja is analyzing a binary, the UI should be responsive. Not only that, but because the analysis prioritizes user-requested analysis, you can start navigating a binary immediately and any functions you select will be added to the top of the analysis queue. The current progress through a binary is shown in the status bar, but note that the total number of items left to analyze will go up as well as the binary is processed and more items are discovered that require analysis.
 
-Errors or warnings during the load of the binary are also shown in the status bar, along with an icon (in the case of the image above, a large number of warnings were shown). The most common warnings are from incomplete lifting and can be safely ignored. If the warnings include a message like `Data flow for function at 0x41414141 did not terminate`, then please report the binary to the [bug database][issues].
+Errors or warnings during the load of the binary are also shown in the status bar, along with an icon (in the case of the image above, a large number of warnings were shown). The most common warnings are from incomplete lifting and can be safely ignored. If the warnings include a message like `Data flow for function at 0x41414141 did not terminate`, then please report the binary to the [bug database](https://github.com/Vector35/binaryninja-api/issues).
 
 ## Interacting
 
@@ -100,7 +100,6 @@ Switching views happens multiple ways. In some instances, it's automatic (clicki
  - `y` : Change type
  - `a` : Change the data type to an ASCII string
  - [1248] : Change type directly to a data variable of the indicated widths
- - `a` : Change the data type to an ASCII string
  - `d` : Switches between data variables of various widths
  - `r` : Change the data type to single ASCII character
  - `o` : Create a pointer data type
@@ -164,7 +163,7 @@ Current options include:
 
 ![hex >](/img/hex.png "hex view")
 
-The hexadecimal view is useful for view raw binary files that may or may not even be executable binaries. The hex view is particularly good for transforming data in various ways via the `Copy as`, `Transform`, and `Paste from` menus. Note that `Transform` menu options will transform the data in-place, and that these options will only work when the Hex View is in the `Raw` mode as opposd to any of the binary views (such as "ELF", "Mach-O", or "PE").
+The hexadecimal view is useful for view raw binary files that may or may not even be executable binaries. The hex view is particularly good for transforming data in various ways via the `Copy as`, `Transform`, and `Paste from` menus. Note that `Transform` menu options will transform the data in-place, and that these options will only work when the Hex View is in the `Raw` mode as opposed to any of the binary views (such as "ELF", "Mach-O", or "PE").
 
 Note that any changes made in the Hex view will take effect immediately in any other views open into the same file (new views can be created via the `Split to new tab`, or `Split to new window` options under `View`.). This can, however, cause large amounts of re-analysis so be warned before making large edits or transformations in a large binary file.
 
@@ -257,35 +256,31 @@ On windows, this is achieved through a separate launcher that loads first and re
 
 Settings are stored in the _user_ directory in the file `settings.json`. Each top level object in this file is represents a different plugin.  As of build 860 the following settings are available:
 
-|Plugin     | Setting                  | Type         | Default                                        | Description                                                                                   |
-|----------:|-------------------------:|-------------:|-----------------------------------------------:|:----------------------------------------------------------------------------------------------|
-| analysis  | autorunLinearSweep       | boolean      | True                                           | Automatically run linear sweep when opening a binary for analysis                             |
-| analysis  | enabledUnicodeBlocks     | list(string) | []                                             | Defines which Unicode blocks to consider when searching for strings                           |
-| analysis  | enableUTF8               | boolean      | True                                           | Whether or not to consider UTF-8 code points when searching for strings                       |
-| analysis  | enableUTF16              | boolean      | True                                           | Whether or not to consider UTF-16 code points when searching for strings                      |
-| analysis  | enableUTF32              | boolean      | True                                           | Whether or not to consider UTF-32 code points when searching for strings                      |
-| analysis  | max-function-size        | integer      | 65536                                          | Any functions over this size will not be automatically analyzed and require manual override   |
-| core      | linux\_ca\_bundle        | string       | ""                                             | Certificate authority (.pem or .crt) file to be used for secure downloads                     |
-| core      | linux\_ca\_dir           | string       | ""                                             | Certificate authority directory (for distributions without a CA bundle)                       |
-| ui        | activeContent            | boolean      | True                                           | Allow Binary Ninja to connect to the web to check for updates                                 |
-| ui        | colorblind               | boolean      | True                                           | Choose colors that are visible to those with red/green colorblind                             |
-| ui        | debug                    | boolean      | False                                          | Enable developer debugging features (Additional views: Lifted IL, and SSA forms)              |
-| ui        | recent-file-limit        | integer      | 10                                             | Specify limit for number of recent files                                                      |
-| ui        | scriptingProvider        | string       | "Python"                                       | Specify the registered ScriptingProvider that controls the 'Console' in the UI                |
-| pdb       | local-store-absolute     | string       | ""                                             | Absolute path specifying where the pdb symbol store exists on this machine, overrides relative path |
-| pdb       | local-store-relative     | string       | "symbols"                                      | Path *relative* to the binaryninja _user_ directory, sepcifying the pdb symbol store          |
-| pdb       | auto-download-pdb        | boolean      | True                                           | Automatically download pdb files from specified symbol servers                                |
-| pdb       | symbol-server-list       | list(string) | ["http://msdl.microsoft.com/download/symbols"] | List of servers to query for pdb symbols.                                                     |
-| python    | interpreter              | string       | "python27.{dylib,dll,so.1}"                    | Python interpreter to load if one is not already present when plugins are loaded              |
-| arch    | x86.disassemblyFlavor      | string       | "BN_INTEL"                                     | "BN_INTEL", "INTEL", or "AT&T"              |
-| arch    | x86.disassemblySeperator   | string       | ", "                                           | What to put between operands in disassembly tokens              |
-| arch    | x86.disassemblyLowercase   | bool         | True                                           | Lowercase opcodes, operands, and registers (False for uppercase)              |
-	"arch" :
-	{
-		// "x86.disassemblyFlavor" : "AT&T",
-		// "x86.disassemblyFlavor" : "BN_INTEL",
-		"x86.disassemblyLowercase" : true,
-		"x86.disassemblySeperator" : ", "
+|Plugin           | Setting                  | Type         | Default                                            | Description                                                                                         |
+|----------------:|-------------------------:|-------------:|---------------------------------------------------:|:----------------------------------------------------------------------------------------------------|
+| analysis        | autorunLinearSweep       | boolean      | True                                               | Automatically run linear sweep when opening a binary for analysis                                   |
+| analysis        | enableUTF8               | boolean      | True                                               | Whether or not to consider UTF-8 code points when searching for strings                             |
+| analysis        | enableUTF16              | boolean      | True                                               | Whether or not to consider UTF-16 code points when searching for strings                            |
+| analysis        | enableUTF32              | boolean      | True                                               | Whether or not to consider UTF-32 code points when searching for strings                            |
+| analysis        | enabledUnicodeBlocks     | list(string) | []                                                 | Defines which Unicode blocks to consider when searching for strings                                 |
+| analysis        | max-function-size        | integer      | 65536                                              | Any functions over this size will not be automatically analyzed and require manual override         |
+| arch            | x86.disassemblyFlavor    | string       | "BN_INTEL"                                         | "BN_INTEL", "INTEL", or "AT&T"                                                                      |
+| arch            | x86.disassemblyLowercase | bool         | True                                               | Lowercase opcodes, operands, and registers (False for uppercase)                                    |
+| arch            | x86.disassemblySeperator | string       | ", "                                               | What to put between operands in disassembly tokens                                                  |
+| core            | linux\_ca\_bundle        | string       | ""                                                 | Certificate authority (.pem or .crt) file to be used for secure downloads                           |
+| core            | linux\_ca\_dir           | string       | ""                                                 | Certificate authority directory (for distributions without a CA bundle)                             |
+| download-client | https-proxy              | string       | ""                                                 | urllib proxyhandler (probably not what you want--by default urllib follows system proxy settings)   |
+| pdb             | auto-download-pdb        | boolean      | True                                               | Automatically download pdb files from specified symbol servers                                      |
+| pdb             | local-store-absolute     | string       | ""                                                 | Absolute path specifying where the pdb symbol store exists on this machine, overrides relative path |
+| pdb             | local-store-relative     | string       | "symbols"                                          | Path *relative* to the binaryninja _user_ directory, sepcifying the pdb symbol store                |
+| pdb             | symbol-server-list       | list(string) | ["http://msdl.microsoft.com/download/symbols"]     | List of servers to query for pdb symbols.                                                           |
+| python          | interpreter              | string       | "{/path/,C:\\\\Path\\\\}python27.{dylib,dll,so.1}" | Python interpreter to load if one is not already present when plugins are loaded                    |
+| ui              | activeContent            | boolean      | True                                               | Allow Binary Ninja to connect to the web to check for updates                                       |
+| ui              | colorblind               | boolean      | True                                               | Choose colors that are visible to those with red/green colorblind                                   |
+| ui              | debug                    | boolean      | False                                              | Enable developer debugging features (Additional views: Lifted IL, and SSA forms)                    |
+| ui              | recent-file-limit        | integer      | 10                                                 | Specify limit for number of recent files                                                            |
+| ui              | scriptingProvider        | string       | "Python"                                           | Specify the registered ScriptingProvider that controls the 'Console' in the UI                      |
+
 Below is an example `settings.json` setting various options:
 ```
 {
@@ -293,15 +288,19 @@ Below is an example `settings.json` setting various options:
     {
         "activeContent" : false,
         "colorblind" : false,
-        "debug" : true
+        "debug" : true,
         "recent-file-limit" : 10
     }
     "pdb" :
     {
-        "local-store-absolute" : "C:\Symbols",
+        "local-store-absolute" : "C:\\Symbols",
         "local-store-relative" : "",
         "symbol-server-list" : ["http://mysymbolserver.company.lan"]
-    }
+    },
+	"python":
+	{
+		"interpreter": "C:\\Users\\Binja\\AppData\\Local\\Programs\\Python\\Python37\\python37.dll"
+	}
 }
 ```
 

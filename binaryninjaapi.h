@@ -19,7 +19,6 @@
 // IN THE SOFTWARE.
 
 #pragma once
-
 #ifdef WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -34,6 +33,7 @@
 #include <set>
 #include <mutex>
 #include <memory>
+#include <cstdint>
 #include "binaryninjacore.h"
 #include "json/json.h"
 
@@ -663,53 +663,6 @@ namespace BinaryNinja
 
 	std::string GetUniqueIdentifierString();
 
-	class QualifiedName
-	{
-		std::vector<std::string> m_name;
-
-	public:
-		QualifiedName();
-		QualifiedName(const std::string& name);
-		QualifiedName(const std::vector<std::string>& name);
-		QualifiedName(const QualifiedName& name);
-
-		QualifiedName& operator=(const std::string& name);
-		QualifiedName& operator=(const std::vector<std::string>& name);
-		QualifiedName& operator=(const QualifiedName& name);
-
-		bool operator==(const QualifiedName& other) const;
-		bool operator!=(const QualifiedName& other) const;
-		bool operator<(const QualifiedName& other) const;
-
-		QualifiedName operator+(const QualifiedName& other) const;
-
-		std::string& operator[](size_t i);
-		const std::string& operator[](size_t i) const;
-		std::vector<std::string>::iterator begin();
-		std::vector<std::string>::iterator end();
-		std::vector<std::string>::const_iterator begin() const;
-		std::vector<std::string>::const_iterator end() const;
-		std::string& front();
-		const std::string& front() const;
-		std::string& back();
-		const std::string& back() const;
-		void insert(std::vector<std::string>::iterator loc, const std::string& name);
-		void insert(std::vector<std::string>::iterator loc, std::vector<std::string>::iterator b,
-			std::vector<std::string>::iterator e);
-		void erase(std::vector<std::string>::iterator i);
-		void clear();
-		void push_back(const std::string& name);
-		// Returns count of names
-		size_t size() const;
-		// Returns size of output string
-		size_t StringSize() const;
-		std::string GetString() const;
-
-		BNQualifiedName GetAPIObject() const;
-		static void FreeAPIObject(BNQualifiedName* name);
-		static QualifiedName FromAPIObject(BNQualifiedName* name);
-	};
-
 	class DataBuffer
 	{
 		BNDataBuffer* m_buffer;
@@ -875,7 +828,6 @@ namespace BinaryNinja
 		BinaryNinja::Ref<BinaryNinja::BinaryView> GetViewOfType(const std::string& name);
 	};
 
-	class BinaryView;
 	class Function;
 	struct DataVariable;
 
@@ -957,22 +909,111 @@ namespace BinaryNinja
 
 	class Function;
 	class BasicBlock;
+	class NameList
+	{
+	protected:
+		std::string m_join;
+		std::vector<std::string> m_name;
+	public:
+		NameList(const std::string& join);
+		NameList(const std::string& name, const std::string& join);
+		NameList(const std::vector<std::string>& name, const std::string& join);
+		NameList(const NameList& name, const std::string& join);
+		virtual ~NameList();
+
+		virtual NameList& operator=(const std::string& name);
+		virtual NameList& operator=(const std::vector<std::string>& name);
+		virtual NameList& operator=(const NameList& name);
+
+		virtual bool operator==(const NameList& other) const;
+		virtual bool operator!=(const NameList& other) const;
+		virtual bool operator<(const NameList& other) const;
+
+		virtual NameList operator+(const NameList& other) const;
+
+		virtual std::string& operator[](size_t i);
+		virtual const std::string& operator[](size_t i) const;
+		virtual std::vector<std::string>::iterator begin();
+		virtual std::vector<std::string>::iterator end();
+		virtual std::vector<std::string>::const_iterator begin() const;
+		virtual std::vector<std::string>::const_iterator end() const;
+		virtual std::string& front();
+		virtual const std::string& front() const;
+		virtual std::string& back();
+		virtual const std::string& back() const;
+		virtual void insert(std::vector<std::string>::iterator loc, const std::string& name);
+		virtual void insert(std::vector<std::string>::iterator loc, std::vector<std::string>::iterator b,
+			std::vector<std::string>::iterator e);
+		virtual void erase(std::vector<std::string>::iterator i);
+		virtual void clear();
+		virtual void push_back(const std::string& name);
+		virtual size_t size() const;
+		virtual size_t StringSize() const;
+
+		virtual std::string GetString() const;
+		virtual std::string GetJoinString() const { return m_join; }
+		virtual bool IsEmpty() const { return m_name.size() == 0; }
+
+		BNNameList GetAPIObject() const;
+		static void FreeAPIObject(BNNameList* name);
+		static NameList FromAPIObject(BNNameList* name);
+	};
+
+	class QualifiedName: public NameList
+	{
+	public:
+		QualifiedName();
+		QualifiedName(const std::string& name);
+		QualifiedName(const std::vector<std::string>& name);
+		QualifiedName(const QualifiedName& name);
+		virtual ~QualifiedName();
+
+		virtual QualifiedName& operator=(const std::string& name);
+		virtual QualifiedName& operator=(const std::vector<std::string>& name);
+		virtual QualifiedName& operator=(const QualifiedName& name);
+		virtual QualifiedName operator+(const QualifiedName& other) const;
+
+		BNQualifiedName GetAPIObject() const;
+		static void FreeAPIObject(BNQualifiedName* name);
+		static QualifiedName FromAPIObject(BNQualifiedName* name);
+	};
+
+	class NameSpace: public NameList
+	{
+	public:
+		NameSpace();
+		NameSpace(const std::string& name);
+		NameSpace(const std::vector<std::string>& name);
+		NameSpace(const NameSpace& name);
+		virtual ~NameSpace();
+
+		virtual NameSpace& operator=(const std::string& name);
+		virtual NameSpace& operator=(const std::vector<std::string>& name);
+		virtual NameSpace& operator=(const NameSpace& name);
+		virtual NameSpace operator+(const NameSpace& other) const;
+
+		virtual bool IsDefaultNameSpace() const;
+		BNNameSpace GetAPIObject() const;
+		static void FreeAPIObject(BNNameSpace* name);
+		static NameSpace FromAPIObject(const BNNameSpace* name);
+	};
 
 	class Symbol: public CoreRefCountObject<BNSymbol, BNNewSymbolReference, BNFreeSymbol>
 	{
 	public:
-		Symbol(BNSymbolType type, const std::string& shortName, const std::string& fullName,
-		       const std::string& rawName, uint64_t addr);
-		Symbol(BNSymbolType type, const std::string& name, uint64_t addr);
+		Symbol(BNSymbolType type, const std::string& shortName, const std::string& fullName, const std::string& rawName,
+			uint64_t addr, BNSymbolBinding binding=NoBinding);
+		Symbol(BNSymbolType type, const std::string& name, uint64_t addr, BNSymbolBinding binding=NoBinding);
 		Symbol(BNSymbol* sym);
 
 		BNSymbolType GetType() const;
+		BNSymbolBinding GetBinding() const;
 		std::string GetShortName() const;
 		std::string GetFullName() const;
 		std::string GetRawName() const;
 		uint64_t GetAddress() const;
 		bool IsAutoDefined() const;
-		void SetAutoDefined(bool val);
+		NameSpace GetNameSpace() const;
 
 		static Ref<Symbol> ImportedFunctionFromImportAddressSymbol(Symbol* sym, uint64_t addr);
 	};
@@ -1076,28 +1117,56 @@ namespace BinaryNinja
 		bool autoDiscovered;
 	};
 
-	struct Segment
+	class Relocation;
+	class Segment: public CoreRefCountObject<BNSegment, BNNewSegmentReference, BNFreeSegment>
 	{
-		uint64_t start, length;
-		uint64_t dataOffset, dataLength;
-		uint32_t flags;
-		bool autoDefined;
+	public:
+		Segment(BNSegment* seg);
+		uint64_t GetStart() const;
+		uint64_t GetLength() const;
+		uint64_t GetEnd() const;
+		uint64_t GetDataEnd() const;
+		uint64_t GetDataOffset() const;
+		uint64_t GetDataLength() const;
+		uint32_t GetFlags() const;
+		bool IsAutoDefined() const;
+
+		std::vector<std::pair<uint64_t, uint64_t>> GetRelocationRanges() const;
+		std::vector<std::pair<uint64_t, uint64_t>> GetRelocationRangesAtAddress(uint64_t addr) const;
+		std::vector<Ref<Relocation>> GetRelocationsInRange(uint64_t addr, uint64_t size) const;
+		uint64_t GetRelocationsCount() const;
+
+		void SetStart(uint64_t newSegmentBase);
+		void SetLength(uint64_t length);
+		void SetDataOffset(uint64_t dataOffset);
+		void SetDataLength(uint64_t dataLength);
+		void SetFlags(uint64_t flags);
+
+		size_t Read(BinaryView* view, uint8_t* dest, uint64_t offset, size_t len);
 	};
 
-	struct Section
+	class Section: public CoreRefCountObject<BNSection, BNNewSectionReference, BNFreeSection>
 	{
-		std::string name, type;
-		uint64_t start, length;
-		std::string linkedSection, infoSection;
-		uint64_t infoData;
-		uint64_t align, entrySize;
-		BNSectionSemantics semantics;
-		bool autoDefined;
+	public:
+		Section(BNSection* sec);
+		Section(const std::string& name, uint64_t start, uint64_t length, BNSectionSemantics semantics,
+			const std::string& type, uint64_t align, uint64_t entrySize, const std::string& linkedSection,
+			const std::string& infoSection, uint64_t infoData, bool autoDefined);
+		std::string GetName() const;
+		std::string GetType() const;
+		uint64_t GetStart() const;
+		uint64_t GetLength() const;
+		uint64_t GetInfoData() const;
+		uint64_t GetAlignment() const;
+		uint64_t GetEntrySize() const;
+		std::string GetLinkedSection() const;
+		std::string GetInfoSection() const;
+		BNSectionSemantics GetSemantics() const;
+		bool AutoDefined() const;
 	};
 
 	struct QualifiedNameAndType;
 	class Metadata;
-
 	class QueryMetadataException: public std::exception
 	{
 		const std::string m_error;
@@ -1148,7 +1217,8 @@ namespace BinaryNinja
 		virtual size_t PerformGetAddressSize() const;
 
 		virtual bool PerformSave(FileAccessor* file);
-
+		void PerformDefineRelocation(Architecture* arch, BNRelocationInfo& info, uint64_t target, uint64_t reloc);
+		void PerformDefineRelocation(Architecture* arch, BNRelocationInfo& info, Ref<Symbol> sym, uint64_t reloc);
 		void NotifyDataWritten(uint64_t offset, size_t len);
 		void NotifyDataInserted(uint64_t offset, size_t len);
 		void NotifyDataRemoved(uint64_t offset, uint64_t len);
@@ -1175,7 +1245,8 @@ namespace BinaryNinja
 		static bool IsRelocatableCallback(void* ctxt);
 		static size_t GetAddressSizeCallback(void* ctxt);
 		static bool SaveCallback(void* ctxt, BNFileAccessor* file);
-
+		static void DefineRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target, uint64_t reloc);
+		static void DefineSymbolRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* target, uint64_t reloc);
 	public:
 		BinaryView(BNBinaryView* view);
 
@@ -1226,6 +1297,7 @@ namespace BinaryNinja
 		bool IsOffsetBackedByFile(uint64_t offset) const;
 		bool IsOffsetCodeSemantics(uint64_t offset) const;
 		bool IsOffsetWritableSemantics(uint64_t offset) const;
+		bool IsOffsetExternSemantics(uint64_t offset) const;
 		uint64_t GetNextValidOffset(uint64_t offset) const;
 
 		uint64_t GetStart() const;
@@ -1246,6 +1318,11 @@ namespace BinaryNinja
 
 		bool Save(FileAccessor* file);
 		bool Save(const std::string& path);
+
+		void DefineRelocation(Architecture* arch, BNRelocationInfo& info, uint64_t target, uint64_t reloc);
+		void DefineRelocation(Architecture* arch, BNRelocationInfo& info, Ref<Symbol> target, uint64_t reloc);
+		std::vector<std::pair<uint64_t, uint64_t>> GetRelocationRanges() const;
+		std::vector<std::pair<uint64_t, uint64_t>> GetRelocationRangesAtAddress(uint64_t addr) const;
 
 		void RegisterNotification(BinaryDataNotification* notify);
 		void UnregisterNotification(BinaryDataNotification* notify);
@@ -1282,20 +1359,20 @@ namespace BinaryNinja
 		std::vector<ReferenceSource> GetCodeReferences(uint64_t addr);
 		std::vector<ReferenceSource> GetCodeReferences(uint64_t addr, uint64_t len);
 
-		Ref<Symbol> GetSymbolByAddress(uint64_t addr);
-		Ref<Symbol> GetSymbolByRawName(const std::string& name);
-		std::vector<Ref<Symbol>> GetSymbolsByName(const std::string& name);
-		std::vector<Ref<Symbol>> GetSymbols();
-		std::vector<Ref<Symbol>> GetSymbols(uint64_t start, uint64_t len);
-		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type);
-		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type, uint64_t start, uint64_t len);
+		Ref<Symbol> GetSymbolByAddress(uint64_t addr, const NameSpace& nameSpace=NameSpace());
+		Ref<Symbol> GetSymbolByRawName(const std::string& name, const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetSymbolsByName(const std::string& name, const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetSymbols(const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetSymbols(uint64_t start, uint64_t len, const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type, const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type, uint64_t start, uint64_t len, const NameSpace& nameSpace=NameSpace());
 
-		void DefineAutoSymbol(Ref<Symbol> sym);
-		void DefineAutoSymbolAndVariableOrFunction(Ref<Platform> platform, Ref<Symbol> sym, Ref<Type> type);
-		void UndefineAutoSymbol(Ref<Symbol> sym);
+		void DefineAutoSymbol(Ref<Symbol> sym, const NameSpace& nameSpace=NameSpace());
+		void DefineAutoSymbolAndVariableOrFunction(Ref<Platform> platform, Ref<Symbol> sym, Ref<Type> type, const NameSpace& nameSpace=NameSpace());
+		void UndefineAutoSymbol(Ref<Symbol> sym, const NameSpace& nameSpace=NameSpace());
 
-		void DefineUserSymbol(Ref<Symbol> sym);
-		void UndefineUserSymbol(Ref<Symbol> sym);
+		void DefineUserSymbol(Ref<Symbol> sym, const NameSpace& nameSpace=NameSpace());
+		void UndefineUserSymbol(Ref<Symbol> sym, const NameSpace& nameSpace=NameSpace());
 
 		void DefineImportedFunction(Ref<Symbol> importAddressSym, Ref<Function> func);
 
@@ -1367,8 +1444,8 @@ namespace BinaryNinja
 		void RemoveAutoSegment(uint64_t start, uint64_t length);
 		void AddUserSegment(uint64_t start, uint64_t length, uint64_t dataOffset, uint64_t dataLength, uint32_t flags);
 		void RemoveUserSegment(uint64_t start, uint64_t length);
-		std::vector<Segment> GetSegments();
-		bool GetSegmentAt(uint64_t addr, Segment& result);
+		std::vector<Ref<Segment>> GetSegments();
+		Ref<Segment> GetSegmentAt(uint64_t addr);
 		bool GetAddressForDataOffset(uint64_t offset, uint64_t& addr);
 
 		void AddAutoSection(const std::string& name, uint64_t start, uint64_t length,
@@ -1381,9 +1458,9 @@ namespace BinaryNinja
 			uint64_t align = 1, uint64_t entrySize = 0, const std::string& linkedSection = "",
 			const std::string& infoSection = "", uint64_t infoData = 0);
 		void RemoveUserSection(const std::string& name);
-		std::vector<Section> GetSections();
-		std::vector<Section> GetSectionsAt(uint64_t addr);
-		bool GetSectionByName(const std::string& name, Section& result);
+		std::vector<Ref<Section>> GetSections();
+		std::vector<Ref<Section>> GetSectionsAt(uint64_t addr);
+		Ref<Section> GetSectionByName(const std::string& name);
 
 		std::vector<std::string> GetUniqueSectionNames(const std::vector<std::string>& names);
 
@@ -1402,7 +1479,24 @@ namespace BinaryNinja
 		void SetMaxFunctionSizeForAnalysis(uint64_t size);
 		bool GetNewAutoFunctionAnalysisSuppressed();
 		void SetNewAutoFunctionAnalysisSuppressed(bool suppress);
+
+		std::set<NameSpace> GetNameSpaces() const;
+		NameSpace GetInternalNameSpace() const;
+		NameSpace GetExternalNameSpace() const;
 	};
+
+
+	class Relocation: public CoreRefCountObject<BNRelocation, BNNewRelocationReference, BNFreeRelocation>
+	{
+	public:
+		Relocation(BNRelocation* reloc);
+		BNRelocationInfo GetInfo() const;
+		Architecture* GetArchitecture() const;
+		uint64_t GetTarget() const;
+		uint64_t GetAddress() const;
+		Ref<Symbol> GetSymbol() const;
+	};
+
 
 	class BinaryData: public BinaryView
 	{
@@ -1644,6 +1738,7 @@ namespace BinaryNinja
 	class MediumLevelILFunction;
 	class FunctionRecognizer;
 	class CallingConvention;
+	class RelocationHandler;
 
 	typedef size_t ExprId;
 
@@ -1874,6 +1969,8 @@ namespace BinaryNinja
 		virtual bool SkipAndReturnValue(uint8_t* data, uint64_t addr, size_t len, uint64_t value);
 
 		void RegisterFunctionRecognizer(FunctionRecognizer* recog);
+		void RegisterRelocationHandler(const std::string& viewName, RelocationHandler* handler);
+		Ref<RelocationHandler> GetRelocationHandler(const std::string& viewName);
 
 		bool IsBinaryViewTypeConstantDefined(const std::string& type, const std::string& name);
 		uint64_t GetBinaryViewTypeConstant(const std::string& type, const std::string& name,
@@ -1915,6 +2012,7 @@ namespace BinaryNinja
 		virtual std::string GetRegisterName(uint32_t reg) override;
 		virtual std::string GetFlagName(uint32_t flag) override;
 		virtual std::string GetFlagWriteTypeName(uint32_t flags) override;
+
 		virtual std::string GetSemanticFlagClassName(uint32_t semClass) override;
 		virtual std::string GetSemanticFlagGroupName(uint32_t semGroup) override;
 		virtual std::vector<uint32_t> GetFullWidthRegisters() override;
@@ -2360,6 +2458,7 @@ namespace BinaryNinja
 	{
 		BNRegisterValueType state;
 		int64_t value;
+		int64_t offset;
 
 		RegisterValue();
 		static RegisterValue FromAPIObject(const BNRegisterValue& value);
@@ -2370,6 +2469,7 @@ namespace BinaryNinja
 	{
 		BNRegisterValueType state;
 		int64_t value;
+		int64_t offset;
 		std::vector<BNValueRange> ranges;
 		std::set<int64_t> valueSet;
 		std::vector<LookupTableEntry> table;
@@ -2804,6 +2904,7 @@ namespace BinaryNinja
 			uint32_t reg, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId Const(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId ConstPointer(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
+		ExprId ExternPointer(size_t size, uint64_t val, uint64_t offset, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstRaw(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstSingle(float val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstDouble(double val, const ILSourceLocation& loc = ILSourceLocation());
@@ -3052,6 +3153,8 @@ namespace BinaryNinja
 		size_t GetMappedMediumLevelILInstructionIndex(size_t instr) const;
 		size_t GetMappedMediumLevelILExprIndex(size_t expr) const;
 
+		static bool IsConstantType(BNLowLevelILOperation type) { return type == LLIL_CONST || type == LLIL_CONST_PTR || type == LLIL_EXTERN_PTR; }
+
 		Ref<FlowGraph> CreateFunctionGraph(DisassemblySettings* settings = nullptr);
 	};
 
@@ -3139,6 +3242,7 @@ namespace BinaryNinja
 			const ILSourceLocation& loc = ILSourceLocation());
 		ExprId Const(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId ConstPointer(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
+		ExprId ExternPointer(size_t size, uint64_t val, uint64_t offset, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstRaw(size_t size, uint64_t val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstSingle(float val, const ILSourceLocation& loc = ILSourceLocation());
 		ExprId FloatConstDouble(double val, const ILSourceLocation& loc = ILSourceLocation());
@@ -3385,6 +3489,8 @@ namespace BinaryNinja
 		Confidence<Ref<Type>> GetExprType(size_t expr);
 		Confidence<Ref<Type>> GetExprType(const MediumLevelILInstruction& expr);
 
+		static bool IsConstantType(BNMediumLevelILOperation op) { return op == MLIL_CONST || op == MLIL_CONST_PTR || op == MLIL_EXTERN_PTR; }
+
 		Ref<FlowGraph> CreateFunctionGraph(DisassemblySettings* settings = nullptr);
 	};
 
@@ -3401,6 +3507,39 @@ namespace BinaryNinja
 
 		virtual bool RecognizeLowLevelIL(BinaryView* data, Function* func, LowLevelILFunction* il);
 		virtual bool RecognizeMediumLevelIL(BinaryView* data, Function* func, MediumLevelILFunction* il);
+	};
+
+	class RelocationHandler: public CoreRefCountObject<BNRelocationHandler,
+		BNNewRelocationHandlerReference, BNFreeRelocationHandler>
+	{
+		static bool GetRelocationInfoCallback(void* ctxt, BNBinaryView* view, BNArchitecture* arch,
+			BNRelocationInfo* result, size_t resultCount);
+		static bool ApplyRelocationCallback(void* ctxt, BNBinaryView* view, BNArchitecture* arch, BNRelocation* reloc,
+			uint8_t* dest, size_t len);
+		static size_t GetOperandForExternalRelocationCallback(void* ctxt, const uint8_t* data, uint64_t addr,
+			size_t length, BNLowLevelILFunction* il, BNRelocation* relocation);
+	protected:
+		RelocationHandler();
+		RelocationHandler(BNRelocationHandler* handler);
+		static void FreeCallback(void* ctxt);
+
+	public:
+		virtual bool GetRelocationInfo(Ref<BinaryView> view, Ref<Architecture> arch, std::vector<BNRelocationInfo>& result);
+		virtual bool ApplyRelocation(Ref<BinaryView> view, Ref<Architecture> arch, Ref<Relocation> reloc, uint8_t* dest,
+			size_t len);
+		virtual size_t GetOperandForExternalRelocation(const uint8_t* data, uint64_t addr, size_t length,
+			Ref<LowLevelILFunction> il, Ref<Relocation> relocation);
+	};
+
+	class CoreRelocationHandler: public RelocationHandler
+	{
+	public:
+		CoreRelocationHandler(BNRelocationHandler* handler);
+		virtual bool GetRelocationInfo(Ref<BinaryView> view, Ref<Architecture> arch, std::vector<BNRelocationInfo>& result) override;
+		virtual bool ApplyRelocation(Ref<BinaryView> view, Ref<Architecture> arch, Ref<Relocation> reloc, uint8_t* dest,
+			size_t len) override;
+		virtual size_t GetOperandForExternalRelocation(const uint8_t* data, uint64_t addr, size_t length,
+			Ref<LowLevelILFunction> il, Ref<Relocation> relocation) override;
 	};
 
 	class UpdateException: public std::exception

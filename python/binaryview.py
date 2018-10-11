@@ -471,32 +471,74 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 
 
 class Segment(object):
-	def __init__(self, start, length, data_offset, data_length, flags, auto_defined):
-		self.start = start
-		self.length = length
-		self.data_offset = data_offset
-		self.data_length = data_length
-		self.flags = flags
-		self.auto_defined = auto_defined
+	def __init__(self, handle):
+		self.handle = handle
 
 	@property
-	def executable(self):
-		return (self.flags & SegmentFlag.SegmentExecutable) != 0
-
-	@property
-	def writable(self):
-		return (self.flags & SegmentFlag.SegmentWritable) != 0
-
-	@property
-	def readable(self):
-		return (self.flags & SegmentFlag.SegmentReadable) != 0
+	def start(self):
+		return core.BNSegmentGetStart(self.handle)
 
 	@property
 	def end(self):
-		return self.start + self.length
+		return core.BNSegmentGetEnd(self.handle)
+
+	@property
+	def executable(self):
+		return (core.BNSegmentGetFlags(self.handle) & SegmentFlag.SegmentExecutable) != 0
+
+	@property
+	def writable(self):
+		return (core.BNSegmentGetFlags(self.handle) & SegmentFlag.SegmentWritable) != 0
+
+	@property
+	def readable(self):
+		return (core.BNSegmentGetFlags(self.handle) & SegmentFlag.SegmentReadable) != 0
+
+	@property
+	def end(self):
+		return core.BNSegmentGetEnd(self.handle)
+
+	@property
+	def data_length(self):
+		return core.BNSegmentGetDataLength(self.handle)
+
+	@property
+	def data_offset(self):
+		return core.BNSegmentGetDataOffset(self.handle)
+
+	@property
+	def data_end(self):
+		return core.BNSegmentGetDataEnd(self.handle)
+
+	@property
+	def relocation_count(self):
+		return core.BNSegmentGetRelocationsCount(self.handle)
+
+	@property
+	def relocation_ranges(self):
+		"""List of relocation range tuples (read-only)"""
+
+		count = ctypes.c_ulonglong()
+		ranges = core.BNSegmentGetRelocationRanges(self.handle, count)
+		result = []
+		for i in xrange(0, count.value):
+			result.append((ranges[i].start, ranges[i].end))
+		core.BNFreeRelocationRanges(ranges, count)
+		return result
+
+	def relocation_ranges_at(self, addr):
+		"""List of relocation range tuples (read-only)"""
+
+		count = ctypes.c_ulonglong()
+		ranges = core.BNSegmentGetRelocationRangesAtAddress(self.handle, addr, count)
+		result = []
+		for i in xrange(0, count.value):
+			result.append((ranges[i].start, ranges[i].end))
+		core.BNFreeRelocationRanges(ranges, count)
+		return result
 
 	def __len__(self):
-		return self.length
+		return core.BNSegmentGetLength(self.handle)
 
 	def __repr__(self):
 		return "<segment: %#x-%#x, %s%s%s>" % (self.start, self.end,
@@ -506,25 +548,55 @@ class Segment(object):
 
 
 class Section(object):
-	def __init__(self, name, section_type, start, length, linked_section, info_section, info_data, align, entry_size, semantics, auto_defined):
-		self.name = name
-		self.type = section_type
-		self.start = start
-		self.length = length
-		self.linked_section = linked_section
-		self.info_section = info_section
-		self.info_data = info_data
-		self.align = align
-		self.entry_size = entry_size
-		self.semantics = SectionSemantics(semantics)
-		self.auto_defined = auto_defined
+	def __init__(self, handle):
+		self.handle = core.handle_of_type(handle, core.BNSection)
+
+	@property
+	def name(self):
+		return core.BNSectionGetName(self.handle)
+
+	@property
+	def type(self):
+		return core.BNSectionGetType(self.handle)
+
+	@property
+	def start(self):
+		return core.BNSectionGetStart(self.handle)
+
+	@property
+	def linked_section(self):
+		return core.BNSectionLinkedSection(self.handle)
+
+	@property
+	def info_section(self):
+		return core.BNSectionInfoSection(self.handle)
+
+	@property
+	def info_data(self):
+		return core.BNSectionInfoData(self.handle)
+
+	@property
+	def align(self):
+		return core.BNSectionAlign(self.handle)
+
+	@property
+	def entry_size(self):
+		return core.BNSectionEntrySize(self.handle)
+
+	@property
+	def semantics(self):
+		return SectionSemantics(core.BNSectionGetSemantics(self.handle))
+
+	@property
+	def auto_defined(self):
+		return core.BNSectionAutoDefined(self.handle)
 
 	@property
 	def end(self):
-		return self.start + self.length
+		return self.start + len(self)
 
 	def __len__(self):
-		return self.length
+		return core.BNSectionGetLength(self.handle)
 
 	def __repr__(self):
 		return "<section %s: %#x-%#x>" % (self.name, self.start, self.end)
@@ -604,8 +676,10 @@ class BinaryView(object):
 	registered_view_type = None
 	next_address = 0
 	_associated_data = {}
+	_registered_instances = []
 
 	def __init__(self, file_metadata=None, parent_view=None, handle=None):
+		self._must_free = True
 		if handle is not None:
 			self.handle = core.handle_of_type(handle, core.BNBinaryView)
 			if file_metadata is None:
@@ -625,6 +699,7 @@ class BinaryView(object):
 			self._cb = core.BNCustomBinaryView()
 			self._cb.context = 0
 			self._cb.init = self._cb.init.__class__(self._init)
+			self._cb.freeObject = self._cb.freeObject.__class__(self._free_object)
 			self._cb.read = self._cb.read.__class__(self._read)
 			self._cb.write = self._cb.write.__class__(self._write)
 			self._cb.insert = self._cb.insert.__class__(self._insert)
@@ -647,6 +722,8 @@ class BinaryView(object):
 			if parent_view is not None:
 				parent_view = parent_view.handle
 			self.handle = core.BNCreateCustomBinaryView(self.__class__.name, file_metadata.handle, parent_view, self._cb)
+			self.__class__._registered_instances.append(self)
+			self._must_free = False
 		self.notifications = {}
 		self.next_address = None  # Do NOT try to access view before init() is called, use placeholder
 
@@ -792,7 +869,8 @@ class BinaryView(object):
 	def __del__(self):
 		for i in self.notifications.values():
 			i._unregister()
-		core.BNFreeBinaryView(self.handle)
+		if self._must_free:
+			core.BNFreeBinaryView(self.handle)
 
 	def __iter__(self):
 		count = ctypes.c_ulonglong(0)
@@ -939,12 +1017,41 @@ class BinaryView(object):
 	def symbols(self):
 		"""Dict of symbols (read-only)"""
 		count = ctypes.c_ulonglong(0)
-		syms = core.BNGetSymbols(self.handle, count)
+		syms = core.BNGetSymbols(self.handle, count, None)
 		result = {}
 		for i in range(0, count.value):
 			sym = types.Symbol(None, None, None, handle=core.BNNewSymbolReference(syms[i]))
-			result[sym.raw_name] = sym
+			if sym.raw_name in result:
+				result[sym.raw_name] = [result[sym.raw_name], sym]
+			else:
+				result[sym.raw_name] = sym
 		core.BNFreeSymbolList(syms, count.value)
+		return result
+
+	@property
+	def internal_namespace(self):
+		"""Internal namespace for the current BinaryView"""
+		ns = core.BNGetInternalNameSpace(self.handle)
+		result = types.NameSpace._from_core_struct(ns)
+		core.BNFreeNameSpace(ns)
+		return result
+
+	@property
+	def external_namespace(self):
+		"""External namespace for the current BinaryView"""
+		ns = core.BNGetExternalNameSpace(self.handle)
+		result = types.NameSpace._from_core_struct(ns)
+		core.BNFreeNameSpace(ns)
+		return result
+
+	@property
+	def namespaces(self):
+		count = ctypes.c_ulonglong(0)
+		nameSpaceList = core.BNGetNameSpaces(self.handle, count)
+		result = []
+		for i in range(count.value):
+			result.append(types.NameSpace._from_core_struct(nameSpaceList[i]))
+		core.BNFreeNameSpaceList(nameSpaceList, count.value);
 		return result
 
 	@property
@@ -983,7 +1090,7 @@ class BinaryView(object):
 		info_ref = core.BNGetAnalysisInfo(self.handle)
 		info = info_ref[0]
 		active_info_list = []
-		for i in xrange(0, info.count):
+		for i in range(0, info.count):
 			func = binaryninja.function.Function(self, core.BNNewFunctionReference(info.activeInfo[i].func))
 			active_info = ActiveAnalysisInfo(func, info.activeInfo[i].analysisTime, info.activeInfo[i].updateCount, info.activeInfo[i].submitCount)
 			active_info_list.append(active_info)
@@ -1035,9 +1142,8 @@ class BinaryView(object):
 		segment_list = core.BNGetSegments(self.handle, count)
 		result = []
 		for i in range(0, count.value):
-			result.append(Segment(segment_list[i].start, segment_list[i].length,
-				segment_list[i].dataOffset, segment_list[i].dataLength, segment_list[i].flags, segment_list[i].autoDefined))
-		core.BNFreeSegmentList(segment_list)
+			result.append(Segment(core.BNNewSegmentReference(segment_list[i])))
+		core.BNFreeSegmentList(segment_list, count.value)
 		return result
 
 	@property
@@ -1047,10 +1153,7 @@ class BinaryView(object):
 		section_list = core.BNGetSections(self.handle, count)
 		result = {}
 		for i in range(0, count.value):
-			result[section_list[i].name] = Section(section_list[i].name, section_list[i].type, section_list[i].start,
-				section_list[i].length, section_list[i].linkedSection, section_list[i].infoSection,
-				section_list[i].infoData, section_list[i].align, section_list[i].entrySize,
-				section_list[i].semantics, section_list[i].autoDefined)
+			result[core.BNSectionGetName(section_list[i])] = Section(section_list[i])
 		core.BNFreeSectionList(section_list, count.value)
 		return result
 
@@ -1098,6 +1201,29 @@ class BinaryView(object):
 	@max_function_size_for_analysis.setter
 	def max_function_size_for_analysis(self, size):
 		core.BNSetMaxFunctionSizeForAnalysis(self.handle, size)
+
+	@property
+	def relocation_ranges(self):
+		"""List of relocation range tuples (read-only)"""
+
+		count = ctypes.c_ulonglong()
+		ranges = core.BNGetRelocationRanges(self.handle, count)
+		result = []
+		for i in xrange(0, count.value):
+			result.append((ranges[i].start, ranges[i].end))
+		core.BNFreeRelocationRanges(ranges, count)
+		return result
+
+	def relocation_ranges_at(self, addr):
+		"""List of relocation range tuples for a given address"""
+
+		count = ctypes.c_ulonglong()
+		ranges = core.BNGetRelocationRangesAtAddress(self.handle, addr, count)
+		result = []
+		for i in xrange(0, count.value):
+			result.append((ranges[i].start, ranges[i].end))
+		core.BNFreeRelocationRanges(ranges, count)
+		return result
 
 	@property
 	def new_auto_function_analysis_suppressed(self):
@@ -1189,6 +1315,12 @@ class BinaryView(object):
 		except:
 			log.log_error(traceback.format_exc())
 			return False
+
+	def _free_object(self, ctxt):
+		try:
+			self.__class__._registered_instances.remove(self)
+		except:
+			log.log_error(traceback.format_exc())
 
 	def _read(self, ctxt, dest, offset, length):
 		try:
@@ -1898,6 +2030,16 @@ class BinaryView(object):
 		"""
 		return core.BNIsOffsetCodeSemantics(self.handle, addr)
 
+	def is_offset_extern_semantics(self, addr):
+		"""
+		``is_offset_extern_semantics`` checks if an virtual address ``addr`` is semantically valid for external references.
+
+		:param int addr: a virtual address to be checked
+		:return: true if the virtual address is valid for writing, false if the virtual address is invalid or error
+		:rtype: bool
+		"""
+		return core.BNIsOffsetExternSemantics(self.handle, addr)
+
 	def is_offset_writable_semantics(self, addr):
 		"""
 		``is_offset_writable_semantics`` checks if an virtual address ``addr`` is semantically writable. Some sections
@@ -2301,12 +2443,13 @@ class BinaryView(object):
 		core.BNFreeCodeReferences(refs, count.value)
 		return result
 
-	def get_symbol_at(self, addr):
+	def get_symbol_at(self, addr, namespace=None):
 		"""
 		``get_symbol_at`` returns the Symbol at the provided virtual address.
 
 		:param int addr: virtual address to query for symbol
 		:return: Symbol for the given virtual address
+		:param NameSpace namespace: the namespace of the symbols to retrieve
 		:rtype: Symbol
 		:Example:
 
@@ -2314,17 +2457,23 @@ class BinaryView(object):
 			<FunctionSymbol: "_start" @ 0x100001174>
 			>>>
 		"""
-		sym = core.BNGetSymbolByAddress(self.handle, addr)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+
+		sym = core.BNGetSymbolByAddress(self.handle, addr, namespace)
 		if sym is None:
 			return None
 		return types.Symbol(None, None, None, handle = sym)
 
-	def get_symbol_by_raw_name(self, name):
+	def get_symbol_by_raw_name(self, name, namespace=None):
 		"""
 		``get_symbol_by_raw_name`` retrieves a Symbol object for the given a raw (mangled) name.
 
 		:param str name: raw (mangled) name of Symbol to be retrieved
 		:return: Symbol object corresponding to the provided raw name
+		:param NameSpace namespace: the namespace to search for the given symbol
 		:rtype: Symbol
 		:Example:
 
@@ -2332,17 +2481,22 @@ class BinaryView(object):
 			<FunctionSymbol: "public: static enum Foobar::foo __cdecl Foobar::testf(enum Foobar::foo)" @ 0x10001100>
 			>>>
 		"""
-		sym = core.BNGetSymbolByRawName(self.handle, name)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		sym = core.BNGetSymbolByRawName(self.handle, name, namespace)
 		if sym is None:
 			return None
 		return types.Symbol(None, None, None, handle = sym)
 
-	def get_symbols_by_name(self, name):
+	def get_symbols_by_name(self, name, namespace=None):
 		"""
 		``get_symbols_by_name`` retrieves a list of Symbol objects for the given symbol name.
 
 		:param str name: name of Symbol object to be retrieved
 		:return: Symbol object corresponding to the provided name
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: Symbol
 		:Example:
 
@@ -2350,15 +2504,19 @@ class BinaryView(object):
 			[<FunctionSymbol: "public: static enum Foobar::foo __cdecl Foobar::testf(enum Foobar::foo)" @ 0x10001100>]
 			>>>
 		"""
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
 		count = ctypes.c_ulonglong(0)
-		syms = core.BNGetSymbolsByName(self.handle, name, count)
+		syms = core.BNGetSymbolsByName(self.handle, name, count, namespace)
 		result = []
 		for i in range(0, count.value):
 			result.append(types.Symbol(None, None, None, handle = core.BNNewSymbolReference(syms[i])))
 		core.BNFreeSymbolList(syms, count.value)
 		return result
 
-	def get_symbols(self, start = None, length = None):
+	def get_symbols(self, start=None, length=None, namespace=None):
 		"""
 		``get_symbols`` retrieves the list of all Symbol objects in the optionally provided range.
 
@@ -2373,17 +2531,21 @@ class BinaryView(object):
 			>>>
 		"""
 		count = ctypes.c_ulonglong(0)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
 		if start is None:
-			syms = core.BNGetSymbols(self.handle, count)
+			syms = core.BNGetSymbols(self.handle, count, namespace)
 		else:
-			syms = core.BNGetSymbolsInRange(self.handle, start, length, count)
+			syms = core.BNGetSymbolsInRange(self.handle, start, length, count, namespace)
 		result = []
 		for i in range(0, count.value):
 			result.append(types.Symbol(None, None, None, handle = core.BNNewSymbolReference(syms[i])))
 		core.BNFreeSymbolList(syms, count.value)
 		return result
 
-	def get_symbols_of_type(self, sym_type, start = None, length = None):
+	def get_symbols_of_type(self, sym_type, start=None, length=None, namespace=None):
 		"""
 		``get_symbols_of_type`` retrieves a list of all Symbol objects of the provided symbol type in the optionally
 		 provided range.
@@ -2401,9 +2563,13 @@ class BinaryView(object):
 		"""
 		if isinstance(sym_type, str):
 			sym_type = SymbolType[sym_type]
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
 		count = ctypes.c_ulonglong(0)
 		if start is None:
-			syms = core.BNGetSymbolsOfType(self.handle, sym_type, count)
+			syms = core.BNGetSymbolsOfType(self.handle, sym_type, count, namespace)
 		else:
 			syms = core.BNGetSymbolsOfTypeInRange(self.handle, sym_type, start, length, count)
 		result = []
@@ -2412,18 +2578,24 @@ class BinaryView(object):
 		core.BNFreeSymbolList(syms, count.value)
 		return result
 
-	def define_auto_symbol(self, sym):
+	def define_auto_symbol(self, sym, namespace=None):
 		"""
-		``define_auto_symbol`` adds a symbol to the internal list of automatically discovered Symbol objects.
+		``define_auto_symbol`` adds a symbol to the internal list of automatically discovered Symbol objects in a given
+		namespace.
 
 		.. warning:: If multiple symbols for the same address are defined, only the most recent symbol will ever be used.
 
 		:param Symbol sym: the symbol to define
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		core.BNDefineAutoSymbol(self.handle, sym.handle)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		core.BNDefineAutoSymbol(self.handle, sym.handle, namespace)
 
-	def define_auto_symbol_and_var_or_function(self, sym, sym_type, plat=None):
+	def define_auto_symbol_and_var_or_function(self, sym, sym_type, plat=None, namespace=None):
 		"""
 		``define_auto_symbol_and_var_or_function``
 
@@ -2432,6 +2604,7 @@ class BinaryView(object):
 		:param Symbol sym: the symbol to define
 		:param SymbolType sym_type: Type of symbol being defined
 		:param Platform plat: (optional) platform
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
 		if plat is None:
@@ -2440,36 +2613,55 @@ class BinaryView(object):
 			plat = plat.handle
 		if sym_type is not None:
 			sym_type = sym_type.handle
-		core.BNDefineAutoSymbolAndVariableOrFunction(self.handle, plat, sym.handle, sym_type)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		core.BNDefineAutoSymbolAndVariableOrFunction(self.handle, plat, sym.handle, sym_type, namespace)
 
-	def undefine_auto_symbol(self, sym):
+	def undefine_auto_symbol(self, sym, namespace=None):
 		"""
 		``undefine_auto_symbol`` removes a symbol from the internal list of automatically discovered Symbol objects.
 
 		:param Symbol sym: the symbol to undefine
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		core.BNUndefineAutoSymbol(self.handle, sym.handle)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		core.BNUndefineAutoSymbol(self.handle, sym.handle, namespace)
 
-	def define_user_symbol(self, sym):
+	def define_user_symbol(self, sym, namespace=None):
 		"""
 		``define_user_symbol`` adds a symbol to the internal list of user added Symbol objects.
 
 		.. warning:: If multiple symbols for the same address are defined, only the most recent symbol will ever be used.
 
 		:param Symbol sym: the symbol to define
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		core.BNDefineUserSymbol(self.handle, sym.handle)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		core.BNDefineUserSymbol(self.handle, sym.handle, namespace)
 
-	def undefine_user_symbol(self, sym):
+	def undefine_user_symbol(self, sym, namespace=None):
 		"""
 		``undefine_user_symbol`` removes a symbol from the internal list of user added Symbol objects.
 
 		:param Symbol sym: the symbol to undefine
+		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		core.BNUndefineUserSymbol(self.handle, sym.handle)
+		if isinstance(namespace, str):
+			namespace = types.NameSpace(namespace)
+		if isinstance(namespace, types.NameSpace):
+			namespace = namespace._get_core_struct()
+		core.BNUndefineUserSymbol(self.handle, sym.handle, namespace)
 
 	def define_imported_function(self, import_addr_sym, func):
 		"""
@@ -3463,12 +3655,10 @@ class BinaryView(object):
 		core.BNRemoveUserSegment(self.handle, start, length)
 
 	def get_segment_at(self, addr):
-		segment = core.BNSegment()
-		if not core.BNGetSegmentAt(self.handle, addr, segment):
+		seg = core.BNGetSegmentAt(self.handle, addr)
+		if not seg:
 			return None
-		result = Segment(segment.start, segment.length, segment.dataOffset, segment.dataLength,
-			segment.flags, segment.autoDefined)
-		return result
+		return Segment(seg)
 
 	def get_address_for_data_offset(self, offset):
 		address = ctypes.c_ulonglong()
@@ -3497,20 +3687,15 @@ class BinaryView(object):
 		section_list = core.BNGetSectionsAt(self.handle, addr, count)
 		result = []
 		for i in range(0, count.value):
-			result.append(Section(section_list[i].name, section_list[i].type, section_list[i].start,
-				section_list[i].length, section_list[i].linkedSection, section_list[i].infoSection,
-				section_list[i].infoData, section_list[i].align, section_list[i].entrySize,
-				section_list[i].semantics, section_list[i].autoDefined))
+			result.append(Section(section_list[i]))
 		core.BNFreeSectionList(section_list, count.value)
 		return result
 
 	def get_section_by_name(self, name):
-		section = core.BNSection()
-		if not core.BNGetSectionByName(self.handle, name, section):
+		section = core.BNGetSectionByName(self.handle, name)
+		if not section:
 			return None
-		result = Section(section.name, section.type, section.start, section.length, section.linkedSection,
-			section.infoSection, section.infoData, section.align, section.entrySize, section.semantics,
-			section.autoDefined)
+		result = Section(section)
 		core.BNFreeSection(section)
 		return result
 

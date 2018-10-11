@@ -59,6 +59,7 @@ static void PrintOperation(BNMediumLevelILOperation operation)
 	ENUM_PRINTER(MLIL_ADDRESS_OF_FIELD)
 	ENUM_PRINTER(MLIL_CONST)
 	ENUM_PRINTER(MLIL_CONST_PTR)
+	ENUM_PRINTER(MLIL_EXTERN_PTR)
 	ENUM_PRINTER(MLIL_ADD)
 	ENUM_PRINTER(MLIL_ADC)
 	ENUM_PRINTER(MLIL_SUB)
@@ -322,16 +323,10 @@ int main(int argc, char *argv[])
 
 				// Example of using visitors to find all constants in the instruction
 				instr.VisitExprs([&](const MediumLevelILInstruction& expr) {
-					switch (expr.operation)
-					{
-					case MLIL_CONST:
-					case MLIL_CONST_PTR:
+					bool status = MediumLevelILFunction::IsConstantType(expr.operation);
+					if (status)
 						printf("        Found constant 0x%" PRIx64 "\n", expr.GetConstant());
-						return false; // Done parsing this
-					default:
-						break;
-					}
-					return true; // Parse any subexpressions
+					return !status;
 				});
 
 				// Example of using the templated accessors for efficiently parsing load instructions
@@ -343,6 +338,12 @@ int main(int argc, char *argv[])
 						{
 							printf("        Loading from address 0x%" PRIx64 "\n",
 								expr.GetSourceExpr<MLIL_LOAD>().GetConstant<MLIL_CONST_PTR>());
+							return false; // Done parsing this
+						}
+						else if (expr.GetSourceExpr<MLIL_LOAD>().operation == MLIL_EXTERN_PTR)
+						{
+							printf("        Loading from address 0x%" PRIx64 "\n",
+								expr.GetSourceExpr<MLIL_LOAD>().GetConstant<MLIL_EXTERN_PTR>());
 							return false; // Done parsing this
 						}
 						break;

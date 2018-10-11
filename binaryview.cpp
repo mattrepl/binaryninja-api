@@ -168,15 +168,16 @@ BinaryDataNotification::BinaryDataNotification()
 }
 
 
-Symbol::Symbol(BNSymbolType type, const string& shortName, const string& fullName, const string& rawName, uint64_t addr)
+Symbol::Symbol(BNSymbolType type, const string& shortName, const string& fullName, const string& rawName, uint64_t addr,
+	BNSymbolBinding binding)
 {
-	m_object = BNCreateSymbol(type, shortName.c_str(), fullName.c_str(), rawName.c_str(), addr);
+	m_object = BNCreateSymbol(type, shortName.c_str(), fullName.c_str(), rawName.c_str(), addr, binding);
 }
 
 
-Symbol::Symbol(BNSymbolType type, const std::string& name, uint64_t addr)
+Symbol::Symbol(BNSymbolType type, const std::string& name, uint64_t addr, BNSymbolBinding binding)
 {
-	m_object = BNCreateSymbol(type, name.c_str(), name.c_str(), name.c_str(), addr);
+	m_object = BNCreateSymbol(type, name.c_str(), name.c_str(), name.c_str(), addr, binding);
 }
 
 
@@ -189,6 +190,21 @@ Symbol::Symbol(BNSymbol* sym)
 BNSymbolType Symbol::GetType() const
 {
 	return BNGetSymbolType(m_object);
+}
+
+
+BNSymbolBinding Symbol::GetBinding() const
+{
+	return BNGetSymbolBinding(m_object);
+}
+
+
+NameSpace Symbol::GetNameSpace() const
+{
+	BNNameSpace name = BNGetSymbolNameSpace(m_object);
+	NameSpace result = NameSpace::FromAPIObject(&name);
+	BNFreeNameSpace(&name);
+	return result;
 }
 
 
@@ -231,12 +247,6 @@ bool Symbol::IsAutoDefined() const
 }
 
 
-void Symbol::SetAutoDefined(bool val)
-{
-	BNSetSymbolAutoDefined(m_object, val);
-}
-
-
 Ref<Symbol> Symbol::ImportedFunctionFromImportAddressSymbol(Symbol* sym, uint64_t addr)
 {
 	return new Symbol(BNImportedFunctionFromImportAddressSymbol(sym->GetObject(), addr));
@@ -267,6 +277,196 @@ void AnalysisCompletionEvent::Cancel()
 }
 
 
+Segment::Segment(BNSegment* seg)
+{
+	m_object = seg;
+}
+
+
+vector<pair<uint64_t, uint64_t>> Segment::GetRelocationRanges() const
+{
+	size_t count = 0;
+	BNRange* ranges = BNSegmentGetRelocationRanges(m_object, &count);
+	vector<pair<uint64_t, uint64_t>> result(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		result.push_back({ranges[i].start, ranges[i].end});
+	}
+	BNFreeRelocationRanges(ranges);
+	return result;
+}
+
+
+vector<pair<uint64_t, uint64_t>> Segment::GetRelocationRangesAtAddress(uint64_t addr) const
+{
+	size_t count = 0;
+	BNRange* ranges = BNSegmentGetRelocationRangesAtAddress(m_object, addr, &count);
+	vector<pair<uint64_t, uint64_t>> result(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		result.push_back({ranges[i].start, ranges[i].end});
+	}
+	BNFreeRelocationRanges(ranges);
+	return result;
+}
+
+
+uint64_t Segment::GetRelocationsCount() const
+{
+	return BNSegmentGetRelocationsCount(m_object);
+}
+
+
+uint64_t Segment::GetStart() const
+{
+	return BNSegmentGetStart(m_object);
+}
+
+
+uint64_t Segment::GetLength() const
+{
+	return BNSegmentGetLength(m_object);
+}
+
+
+uint64_t Segment::GetEnd() const
+{
+	return BNSegmentGetEnd(m_object);
+}
+
+
+uint64_t Segment::GetDataEnd() const
+{
+	return BNSegmentGetDataEnd(m_object);
+}
+
+
+uint64_t Segment::GetDataOffset() const
+{
+	return BNSegmentGetDataOffset(m_object);
+}
+
+
+uint64_t Segment::GetDataLength() const
+{
+	return BNSegmentGetDataLength(m_object);
+}
+
+
+uint32_t Segment::GetFlags() const
+{
+	return BNSegmentGetFlags(m_object);
+}
+
+
+bool Segment::IsAutoDefined() const
+{
+	return BNSegmentIsAutoDefined(m_object);
+}
+
+
+void Segment::SetLength(uint64_t length)
+{
+	BNSegmentSetLength(m_object, length);
+}
+
+
+void Segment::SetDataOffset(uint64_t dataOffset)
+{
+	BNSegmentSetDataOffset(m_object, dataOffset);
+}
+
+
+void Segment::SetDataLength(uint64_t dataLength)
+{
+	BNSegmentSetDataLength(m_object, dataLength);
+}
+
+
+void Segment::SetFlags(uint64_t flags)
+{
+	BNSegmentSetFlags(m_object, flags);
+}
+
+
+size_t Segment::Read(BinaryView* view, uint8_t* dest, uint64_t offset, size_t len)
+{
+	return BNSegmentRead(m_object, view->GetObject(), dest, offset, len);
+}
+
+
+Section::Section(BNSection* sec)
+{
+	m_object = sec;
+}
+
+
+std::string Section::GetName() const
+{
+	return BNSectionGetName(m_object);
+}
+
+
+std::string Section::GetType() const
+{
+	return BNSectionGetType(m_object);
+}
+
+
+uint64_t Section::GetStart() const
+{
+	return BNSectionGetStart(m_object);
+}
+
+
+uint64_t Section::GetLength() const
+{
+	return BNSectionGetLength(m_object);
+}
+
+
+uint64_t Section::GetInfoData() const
+{
+	return BNSectionGetInfoData(m_object);
+}
+
+
+uint64_t Section::GetAlignment() const
+{
+	return BNSectionGetAlign(m_object);
+}
+
+
+uint64_t Section::GetEntrySize() const
+{
+	return BNSectionGetEntrySize(m_object);
+}
+
+
+std::string Section::GetLinkedSection() const
+{
+	return BNSectionGetLinkedSection(m_object);
+}
+
+
+std::string Section::GetInfoSection() const
+{
+	return BNSectionGetInfoSection(m_object);
+}
+
+
+BNSectionSemantics Section::GetSemantics() const
+{
+	return BNSectionGetSemantics(m_object);
+}
+
+
+bool Section::AutoDefined() const
+{
+	return BNSectionIsAutoDefined(m_object);
+}
+
+
 BinaryView::BinaryView(const std::string& typeName, FileMetadata* file, BinaryView* parentView)
 {
 	BNCustomBinaryView view;
@@ -292,7 +492,8 @@ BinaryView::BinaryView(const std::string& typeName, FileMetadata* file, BinaryVi
 	view.isRelocatable = IsRelocatableCallback;
 	view.getAddressSize = GetAddressSizeCallback;
 	view.save = SaveCallback;
-
+	view.defineRelocation = DefineRelocationCallback;
+	view.defineSymbolRelocation = DefineSymbolRelocationCallback;
 	m_file = file;
 	AddRefForRegistration();
 	m_object = BNCreateCustomBinaryView(typeName.c_str(), m_file->GetObject(),
@@ -455,6 +656,27 @@ bool BinaryView::SaveCallback(void* ctxt, BNFileAccessor* file)
 }
 
 
+void BinaryView::DefineRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target,
+	uint64_t reloc)
+{
+	BinaryView* view = (BinaryView*)ctxt;
+	BNRelocationInfo curInfo = *info;
+	Architecture* curArch = new CoreArchitecture(arch);
+	return view->PerformDefineRelocation(curArch, curInfo, target, reloc);
+}
+
+
+void BinaryView::DefineSymbolRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* sym,
+	uint64_t reloc)
+{
+	BinaryView* view = (BinaryView*)ctxt;
+	BNRelocationInfo curInfo = *info;
+	Architecture* curArch = new CoreArchitecture(arch);
+	Ref<Symbol> curSymbol = new Symbol(sym);
+	return view->PerformDefineRelocation(curArch, curInfo, curSymbol, reloc);
+}
+
+
 bool BinaryView::PerformIsValidOffset(uint64_t offset)
 {
 	uint8_t val;
@@ -525,6 +747,18 @@ bool BinaryView::PerformSave(FileAccessor* file)
 	if (parent)
 		return parent->Save(file);
 	return false;
+}
+
+
+void BinaryView::PerformDefineRelocation(Architecture* arch, BNRelocationInfo& info, uint64_t target, uint64_t reloc)
+{
+	DefineRelocation(arch, info, target, reloc);
+}
+
+
+void BinaryView::PerformDefineRelocation(Architecture* arch, BNRelocationInfo& info, Ref<Symbol> target, uint64_t reloc)
+{
+	DefineRelocation(arch, info, target, reloc);
 }
 
 
@@ -707,6 +941,46 @@ bool BinaryView::Save(const string& path)
 }
 
 
+void BinaryView::DefineRelocation(Architecture* arch, BNRelocationInfo& info, uint64_t target, uint64_t reloc)
+{
+	BNDefineRelocation(m_object, arch->GetObject(), &info, target, reloc);
+}
+
+
+void BinaryView::DefineRelocation(Architecture* arch, BNRelocationInfo& info, Ref<Symbol> target, uint64_t reloc)
+{
+	BNDefineSymbolRelocation(m_object, arch->GetObject(), &info, target->GetObject(), reloc);
+}
+
+
+vector<pair<uint64_t, uint64_t>> BinaryView::GetRelocationRanges() const
+{
+	size_t count = 0;
+	BNRange* ranges = BNGetRelocationRanges(m_object, &count);
+	vector<pair<uint64_t, uint64_t>> result(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		result.push_back({ranges[i].start, ranges[i].end});
+	}
+	BNFreeRelocationRanges(ranges);
+	return result;
+}
+
+
+vector<pair<uint64_t, uint64_t>> BinaryView::GetRelocationRangesAtAddress(uint64_t addr) const
+{
+	size_t count = 0;
+	BNRange* ranges = BNGetRelocationRangesAtAddress(m_object, addr, &count);
+	vector<pair<uint64_t, uint64_t>> result(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		result.push_back({ranges[i].start, ranges[i].end});
+	}
+	BNFreeRelocationRanges(ranges);
+	return result;
+}
+
+
 void BinaryView::RegisterNotification(BinaryDataNotification* notify)
 {
 	BNRegisterDataNotification(m_object, notify->GetCallbacks());
@@ -782,6 +1056,12 @@ bool BinaryView::IsOffsetBackedByFile(uint64_t offset) const
 bool BinaryView::IsOffsetCodeSemantics(uint64_t offset) const
 {
 	return BNIsOffsetCodeSemantics(m_object, offset);
+}
+
+
+bool BinaryView::IsOffsetExternSemantics(uint64_t offset) const
+{
+	return BNIsOffsetExternSemantics(m_object, offset);
 }
 
 
@@ -1010,6 +1290,7 @@ vector<Ref<Function>> BinaryView::GetAnalysisFunctionList()
 		result.push_back(new Function(BNNewFunctionReference(list[i])));
 
 	BNFreeFunctionList(list, count);
+
 	return result;
 }
 
@@ -1158,28 +1439,32 @@ vector<ReferenceSource> BinaryView::GetCodeReferences(uint64_t addr, uint64_t le
 }
 
 
-Ref<Symbol> BinaryView::GetSymbolByAddress(uint64_t addr)
+Ref<Symbol> BinaryView::GetSymbolByAddress(uint64_t addr, const NameSpace& nameSpace)
 {
-	BNSymbol* sym = BNGetSymbolByAddress(m_object, addr);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol* sym = BNGetSymbolByAddress(m_object, addr, &ns);
+	NameSpace::FreeAPIObject(&ns);
 	if (!sym)
 		return nullptr;
 	return new Symbol(sym);
 }
 
 
-Ref<Symbol> BinaryView::GetSymbolByRawName(const string& name)
+Ref<Symbol> BinaryView::GetSymbolByRawName(const string& name, const NameSpace& nameSpace)
 {
-	BNSymbol* sym = BNGetSymbolByRawName(m_object, name.c_str());
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol* sym = BNGetSymbolByRawName(m_object, name.c_str(), &ns);
 	if (!sym)
 		return nullptr;
 	return new Symbol(sym);
 }
 
 
-vector<Ref<Symbol>> BinaryView::GetSymbolsByName(const string& name)
+vector<Ref<Symbol>> BinaryView::GetSymbolsByName(const string& name, const NameSpace& nameSpace)
 {
 	size_t count;
-	BNSymbol** syms = BNGetSymbolsByName(m_object, name.c_str(), &count);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetSymbolsByName(m_object, name.c_str(), &count, &ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1191,10 +1476,11 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsByName(const string& name)
 }
 
 
-vector<Ref<Symbol>> BinaryView::GetSymbols()
+vector<Ref<Symbol>> BinaryView::GetSymbols(const NameSpace& nameSpace)
 {
 	size_t count;
-	BNSymbol** syms = BNGetSymbols(m_object, &count);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetSymbols(m_object, &count, &ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1206,10 +1492,11 @@ vector<Ref<Symbol>> BinaryView::GetSymbols()
 }
 
 
-vector<Ref<Symbol>> BinaryView::GetSymbols(uint64_t start, uint64_t len)
+vector<Ref<Symbol>> BinaryView::GetSymbols(uint64_t start, uint64_t len, const NameSpace& nameSpace)
 {
 	size_t count;
-	BNSymbol** syms = BNGetSymbolsInRange(m_object, start, len, &count);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetSymbolsInRange(m_object, start, len, &count, &ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1221,10 +1508,11 @@ vector<Ref<Symbol>> BinaryView::GetSymbols(uint64_t start, uint64_t len)
 }
 
 
-vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type)
+vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, const NameSpace& nameSpace)
 {
 	size_t count;
-	BNSymbol** syms = BNGetSymbolsOfType(m_object, type, &count);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetSymbolsOfType(m_object, type, &count, &ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1236,10 +1524,11 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type)
 }
 
 
-vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, uint64_t start, uint64_t len)
+vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, uint64_t start, uint64_t len, const NameSpace& nameSpace)
 {
 	size_t count;
-	BNSymbol** syms = BNGetSymbolsOfTypeInRange(m_object, type, start, len, &count);
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetSymbolsOfTypeInRange(m_object, type, start, len, &count, &ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1251,34 +1540,39 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, uint64_t sta
 }
 
 
-void BinaryView::DefineAutoSymbol(Ref<Symbol> sym)
+void BinaryView::DefineAutoSymbol(Ref<Symbol> sym, const NameSpace& nameSpace)
 {
-	BNDefineAutoSymbol(m_object, sym->GetObject());
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNDefineAutoSymbol(m_object, sym->GetObject(), &ns);
 }
 
 
-void BinaryView::DefineAutoSymbolAndVariableOrFunction(Ref<Platform> platform, Ref<Symbol> sym, Ref<Type> type)
+void BinaryView::DefineAutoSymbolAndVariableOrFunction(Ref<Platform> platform, Ref<Symbol> sym, Ref<Type> type, const NameSpace& nameSpace)
 {
+	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNDefineAutoSymbolAndVariableOrFunction(m_object, platform ? platform->GetObject() : nullptr, sym->GetObject(),
-		type ? type->GetObject() : nullptr);
+		type ? type->GetObject() : nullptr, &ns);
 }
 
 
-void BinaryView::UndefineAutoSymbol(Ref<Symbol> sym)
+void BinaryView::UndefineAutoSymbol(Ref<Symbol> sym, const NameSpace& nameSpace)
 {
-	BNUndefineAutoSymbol(m_object, sym->GetObject());
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNUndefineAutoSymbol(m_object, sym->GetObject(), &ns);
 }
 
 
-void BinaryView::DefineUserSymbol(Ref<Symbol> sym)
+void BinaryView::DefineUserSymbol(Ref<Symbol> sym, const NameSpace& nameSpace)
 {
-	BNDefineUserSymbol(m_object, sym->GetObject());
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNDefineUserSymbol(m_object, sym->GetObject(), &ns);
 }
 
 
-void BinaryView::UndefineUserSymbol(Ref<Symbol> sym)
+void BinaryView::UndefineUserSymbol(Ref<Symbol> sym, const NameSpace& nameSpace)
 {
-	BNUndefineUserSymbol(m_object, sym->GetObject());
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNUndefineUserSymbol(m_object, sym->GetObject(), &ns);
 }
 
 
@@ -1765,42 +2059,28 @@ void BinaryView::RemoveUserSegment(uint64_t start, uint64_t length)
 }
 
 
-vector<Segment> BinaryView::GetSegments()
+vector<Ref<Segment>> BinaryView::GetSegments()
 {
 	size_t count;
-	BNSegment* segments = BNGetSegments(m_object, &count);
+	BNSegment** segments = BNGetSegments(m_object, &count);
 
-	vector<Segment> result;
+	vector<Ref<Segment>> result;
 	result.reserve(count);
 	for (size_t i = 0; i < count; i++)
-	{
-		Segment segment;
-		segment.start = segments[i].start;
-		segment.length = segments[i].length;
-		segment.dataOffset = segments[i].dataOffset;
-		segment.dataLength = segments[i].dataLength;
-		segment.flags = segments[i].flags;
-		segment.autoDefined = segments[i].autoDefined;
-		result.push_back(segment);
-	}
+		result.push_back(new Segment(BNNewSegmentReference(segments[i])));
 
-	BNFreeSegmentList(segments);
+	BNFreeSegmentList(segments, count);
 	return result;
 }
 
-bool BinaryView::GetSegmentAt(uint64_t addr, Segment& result)
-{
-	BNSegment segment;
-	if (!BNGetSegmentAt(m_object, addr, &segment))
-		return false;
 
-	result.start = segment.start;
-	result.length = segment.length;
-	result.dataOffset = segment.dataOffset;
-	result.dataLength = segment.dataLength;
-	result.flags = segment.flags;
-	result.autoDefined = segment.autoDefined;
-	return true;
+Ref<Segment> BinaryView::GetSegmentAt(uint64_t addr)
+{
+	BNSegment* segment = BNGetSegmentAt(m_object, addr);
+	if (!segment)
+		return nullptr;
+
+	return new Segment(BNNewSegmentReference(segment));
 }
 
 
@@ -1840,27 +2120,31 @@ void BinaryView::RemoveUserSection(const string& name)
 }
 
 
-vector<Section> BinaryView::GetSections()
+vector<Ref<Section>> BinaryView::GetSections()
 {
 	size_t count;
-	BNSection* sections = BNGetSections(m_object, &count);
+	BNSection** sections = BNGetSections(m_object, &count);
 
-	vector<Section> result;
-	result.reserve(count);
+	vector<Ref<Section>> result;
+    result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+		result.push_back(new Section(BNNewSectionReference(sections[i])));
+
+	BNFreeSectionList(sections, count);
+	return result;
+}
+
+
+vector<Ref<Section>> BinaryView::GetSectionsAt(uint64_t addr)
+{
+	size_t count;
+	BNSection** sections = BNGetSectionsAt(m_object, addr, &count);
+
+	vector<Ref<Section>> result;
+    result.reserve(count);
 	for (size_t i = 0; i < count; i++)
 	{
-		Section section;
-		section.name = sections[i].name;
-		section.type = sections[i].type;
-		section.start = sections[i].start;
-		section.length = sections[i].length;
-		section.linkedSection = sections[i].linkedSection;
-		section.infoSection = sections[i].infoSection;
-		section.infoData = sections[i].infoData;
-		section.align = sections[i].align;
-		section.entrySize = sections[i].entrySize;
-		section.semantics = sections[i].semantics;
-		result.push_back(section);
+		result.push_back(new Section(BNNewSectionReference(sections[i])));
 	}
 
 	BNFreeSectionList(sections, count);
@@ -1868,53 +2152,12 @@ vector<Section> BinaryView::GetSections()
 }
 
 
-vector<Section> BinaryView::GetSectionsAt(uint64_t addr)
+Ref<Section> BinaryView::GetSectionByName(const string& name)
 {
-	size_t count;
-	BNSection* sections = BNGetSectionsAt(m_object, addr, &count);
-
-	vector<Section> result;
-	result.reserve(count);
-	for (size_t i = 0; i < count; i++)
-	{
-		Section section;
-		section.name = sections[i].name;
-		section.type = sections[i].type;
-		section.start = sections[i].start;
-		section.length = sections[i].length;
-		section.linkedSection = sections[i].linkedSection;
-		section.infoSection = sections[i].infoSection;
-		section.infoData = sections[i].infoData;
-		section.align = sections[i].align;
-		section.entrySize = sections[i].entrySize;
-		section.semantics = sections[i].semantics;
-		result.push_back(section);
-	}
-
-	BNFreeSectionList(sections, count);
-	return result;
-}
-
-
-bool BinaryView::GetSectionByName(const string& name, Section& result)
-{
-	BNSection section;
-	if (!BNGetSectionByName(m_object, name.c_str(), &section))
-		return false;
-
-	result.name = section.name;
-	result.type = section.type;
-	result.start = section.start;
-	result.length = section.length;
-	result.linkedSection = section.linkedSection;
-	result.infoSection = section.infoSection;
-	result.infoData = section.infoData;
-	result.align = section.align;
-	result.entrySize = section.entrySize;
-	result.semantics = section.semantics;
-
-	BNFreeSection(&section);
-	return true;
+	BNSection* section = BNGetSectionByName(m_object, name.c_str());
+	if (section)
+		return new Section(BNNewSectionReference(section));
+	return nullptr;
 }
 
 
@@ -2025,6 +2268,75 @@ bool BinaryView::GetNewAutoFunctionAnalysisSuppressed()
 void BinaryView::SetNewAutoFunctionAnalysisSuppressed(bool suppress)
 {
 	BNSetNewAutoFunctionAnalysisSuppressed(m_object, suppress);
+}
+
+
+set<NameSpace> BinaryView::GetNameSpaces() const
+{
+	set<NameSpace> nameSpaces;
+	size_t count = 0;
+	BNNameSpace* nameSpaceList = BNGetNameSpaces(m_object, &count);
+	for (size_t i = 0; i < count; i++)
+		nameSpaces.insert(NameSpace::FromAPIObject(&nameSpaceList[i]));
+	BNFreeNameSpaceList(nameSpaceList, count);
+	return nameSpaces;
+}
+
+
+NameSpace BinaryView::GetInternalNameSpace() const
+{
+	BNNameSpace ns = BNGetInternalNameSpace(m_object);
+	NameSpace nameSpace = NameSpace::FromAPIObject(&ns);
+	BNFreeNameSpace(&ns);
+	return nameSpace;
+}
+
+
+NameSpace BinaryView::GetExternalNameSpace() const
+{
+	BNNameSpace ns = BNGetExternalNameSpace(m_object);
+	NameSpace nameSpace = NameSpace::FromAPIObject(&ns);
+	BNFreeNameSpace(&ns);
+	return nameSpace;
+}
+
+
+Relocation::Relocation(BNRelocation* reloc)
+{
+	m_object = reloc;
+}
+
+
+BNRelocationInfo Relocation::GetInfo() const
+{
+	return BNRelocationGetInfo(m_object);
+}
+
+
+Architecture* Relocation::GetArchitecture() const
+{
+	return new CoreArchitecture(BNRelocationGetArchitecture(m_object));
+}
+
+
+uint64_t Relocation::GetTarget() const
+{
+	return BNRelocationGetTarget(m_object);
+}
+
+
+uint64_t Relocation::GetAddress() const
+{
+	return BNRelocationGetReloc(m_object);
+}
+
+
+Ref<Symbol> Relocation::GetSymbol() const
+{
+	BNSymbol* sym = BNRelocationGetSymbol(m_object);
+	if (!sym)
+		return nullptr;
+	return new Symbol(sym);
 }
 
 

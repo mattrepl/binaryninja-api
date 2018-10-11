@@ -225,6 +225,7 @@ class LowLevelILInstruction(object):
 		LowLevelILOperation.LLIL_REG_STACK_FREE_REL: [("stack", "reg_stack"), ("dest", "expr")],
 		LowLevelILOperation.LLIL_CONST: [("constant", "int")],
 		LowLevelILOperation.LLIL_CONST_PTR: [("constant", "int")],
+		LowLevelILOperation.LLIL_EXTERN_PTR: [("constant", "int"), ("offset", "int")],
 		LowLevelILOperation.LLIL_FLOAT_CONST: [("constant", "float")],
 		LowLevelILOperation.LLIL_FLAG: [("src", "flag")],
 		LowLevelILOperation.LLIL_FLAG_BIT: [("src", "flag"), ("bit", "int")],
@@ -1098,6 +1099,17 @@ class LowLevelILFunction(object):
 		:rtype: LowLevelILExpr
 		"""
 		return self.expr(LowLevelILOperation.LLIL_CONST_PTR, value, size=size)
+
+	def reloc_pointer(self, size, value):
+		"""
+		``reloc_pointer`` returns an expression for the constant relocated pointer ``value`` with size ``size``
+
+		:param int size: the size of the pointer in bytes
+		:param int value: address referenced by pointer
+		:return: A constant expression of given value and size
+		:rtype: LowLevelILExpr
+		"""
+		return self.expr(LowLevelILOperation.LLIL_EXTERN_PTR, value, size=size)
 
 	def float_const_raw(self, size, value):
 		"""

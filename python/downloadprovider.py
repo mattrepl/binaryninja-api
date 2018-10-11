@@ -35,9 +35,11 @@ from binaryninja import log
 
 # 2-3 compatibility
 from binaryninja import pyNativeStr
+from binaryninja import range
 
 
 class DownloadInstance(object):
+	_registered_instances = []
 	def __init__(self, provider, handle = None):
 		if handle is None:
 			self._cb = core.BNDownloadInstanceCallbacks()
@@ -45,15 +47,18 @@ class DownloadInstance(object):
 			self._cb.destroyInstance = self._cb.destroyInstance.__class__(self._destroy_instance)
 			self._cb.performRequest = self._cb.performRequest.__class__(self._perform_request)
 			self.handle = core.BNInitDownloadInstance(provider.handle, self._cb)
+			self.__class__._registered_instances.append(self)
 		else:
 			self.handle = core.handle_of_type(handle, core.BNDownloadInstance)
-		self._outputCallbacks = None
+		self._must_free = handle is not None
 
 	def __del__(self):
-		core.BNFreeDownloadInstance(self.handle)
+		if self._must_free:
+			core.BNFreeDownloadInstance(self.handle)
 
 	def _destroy_instance(self, ctxt):
 		try:
+			self.__class__._registered_instances.remove(self)
 			self.perform_destroy_instance()
 		except:
 			log.log_error(traceback.format_exc())
@@ -85,7 +90,7 @@ class _DownloadProviderMetaclass(type):
 		count = ctypes.c_ulonglong()
 		types = core.BNGetDownloadProviderList(count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append(DownloadProvider(types[i]))
 		core.BNFreeDownloadProviderList(types)
 		return result
@@ -95,7 +100,7 @@ class _DownloadProviderMetaclass(type):
 		count = ctypes.c_ulonglong()
 		types = core.BNGetDownloadProviderList(count)
 		try:
-			for i in xrange(0, count.value):
+			for i in range(0, count.value):
 				yield DownloadProvider(types[i])
 		finally:
 			core.BNFreeDownloadProviderList(types)
@@ -148,7 +153,7 @@ class DownloadProvider(with_metaclass(_DownloadProviderMetaclass, object)):
 		return DownloadInstance(self, handle = result)
 
 
-if sys.version_info >= (2, 7, 9):
+if (sys.platform != "win32") and (sys.version_info >= (2, 7, 9)):
 	try:
 		from urllib.request import urlopen, build_opener, install_opener, ProxyHandler
 		from urllib.error import URLError
@@ -211,7 +216,8 @@ if sys.version_info >= (2, 7, 9):
 else:
 	try:
 		import requests
-		from requests import pyopenssl
+		if sys.platform != "win32":
+			from requests import pyopenssl
 		class PythonDownloadInstance(DownloadInstance):
 			def __init__(self, provider):
 				super(PythonDownloadInstance, self).__init__(provider)
@@ -263,7 +269,9 @@ else:
 		PythonDownloadProvider().register()
 	except ImportError:
 		if sys.platform == "win32":
-			log.log_error("Provided Python version is too old! Only Python 2.7.10 and above are known to work on Windows!")
+			log.log_error("The pip requests package is required for network connectivity!")
+			log.log_error("Please install the requests package into the selected Python environment:")
+			log.log_error("  python -m pip install requests")
 		else:
 			log.log_error("On Python versions below 2.7.9, the pip requests[security] package is required for network connectivity!")
 			log.log_error("On an Ubuntu 14.04 install, the following three commands are sufficient to enable networking for the current user:")
