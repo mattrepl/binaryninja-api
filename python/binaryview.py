@@ -537,6 +537,22 @@ class Segment(object):
 		core.BNFreeRelocationRanges(ranges, count)
 		return result
 
+	def __del__(self):
+		core.BNFreeSegment(self.handle)
+
+	def __eq__(self, other):
+		if not isinstance(other, Segment):
+			return False
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
+
+	def __ne__(self, other):
+		if not isinstance(other, Segment):
+			return False
+		return ctypes.addressof(self.handle.contents) != ctypes.addressof(other.handle.contents)
+
+	def __hash__(self):
+		return hash(self.handle.contents)
+
 	def __len__(self):
 		return core.BNSegmentGetLength(self.handle)
 
@@ -565,23 +581,23 @@ class Section(object):
 
 	@property
 	def linked_section(self):
-		return core.BNSectionLinkedSection(self.handle)
+		return core.BNSectionGetLinkedSection(self.handle)
 
 	@property
 	def info_section(self):
-		return core.BNSectionInfoSection(self.handle)
+		return core.BNSectionGetInfoSection(self.handle)
 
 	@property
 	def info_data(self):
-		return core.BNSectionInfoData(self.handle)
+		return core.BNSectionGetInfoData(self.handle)
 
 	@property
 	def align(self):
-		return core.BNSectionAlign(self.handle)
+		return core.BNSectionGetAlign(self.handle)
 
 	@property
 	def entry_size(self):
-		return core.BNSectionEntrySize(self.handle)
+		return core.BNSectionGetEntrySize(self.handle)
 
 	@property
 	def semantics(self):
@@ -589,11 +605,27 @@ class Section(object):
 
 	@property
 	def auto_defined(self):
-		return core.BNSectionAutoDefined(self.handle)
+		return core.BNSectionIsAutoDefined(self.handle)
 
 	@property
 	def end(self):
 		return self.start + len(self)
+
+	def __del__(self):
+		core.BNFreeSection(self.handle)
+
+	def __eq__(self, other):
+		if not isinstance(other, Section):
+			return False
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
+
+	def __ne__(self, other):
+		if not isinstance(other, Section):
+			return False
+		return ctypes.addressof(self.handle.contents) != ctypes.addressof(other.handle.contents)
+
+	def __hash__(self):
+		return hash(self.handle.contents)
 
 	def __len__(self):
 		return core.BNSectionGetLength(self.handle)
@@ -1028,24 +1060,25 @@ class BinaryView(object):
 		core.BNFreeSymbolList(syms, count.value)
 		return result
 
-	@property
+	@classmethod
 	def internal_namespace(self):
 		"""Internal namespace for the current BinaryView"""
-		ns = core.BNGetInternalNameSpace(self.handle)
+		ns = core.BNGetInternalNameSpace()
 		result = types.NameSpace._from_core_struct(ns)
 		core.BNFreeNameSpace(ns)
 		return result
 
-	@property
+	@classmethod
 	def external_namespace(self):
 		"""External namespace for the current BinaryView"""
-		ns = core.BNGetExternalNameSpace(self.handle)
+		ns = core.BNGetExternalNameSpace()
 		result = types.NameSpace._from_core_struct(ns)
 		core.BNFreeNameSpace(ns)
 		return result
 
 	@property
 	def namespaces(self):
+		"""Returns a list of namespaces for the current BinaryView"""
 		count = ctypes.c_ulonglong(0)
 		nameSpaceList = core.BNGetNameSpaces(self.handle, count)
 		result = []
@@ -1153,7 +1186,7 @@ class BinaryView(object):
 		section_list = core.BNGetSections(self.handle, count)
 		result = {}
 		for i in range(0, count.value):
-			result[core.BNSectionGetName(section_list[i])] = Section(section_list[i])
+			result[core.BNSectionGetName(section_list[i])] = Section(core.BNNewSectionReference(section_list[i]))
 		core.BNFreeSectionList(section_list, count.value)
 		return result
 
@@ -2578,7 +2611,7 @@ class BinaryView(object):
 		core.BNFreeSymbolList(syms, count.value)
 		return result
 
-	def define_auto_symbol(self, sym, namespace=None):
+	def define_auto_symbol(self, sym):
 		"""
 		``define_auto_symbol`` adds a symbol to the internal list of automatically discovered Symbol objects in a given
 		namespace.
@@ -2586,16 +2619,11 @@ class BinaryView(object):
 		.. warning:: If multiple symbols for the same address are defined, only the most recent symbol will ever be used.
 
 		:param Symbol sym: the symbol to define
-		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		if isinstance(namespace, str):
-			namespace = types.NameSpace(namespace)
-		if isinstance(namespace, types.NameSpace):
-			namespace = namespace._get_core_struct()
-		core.BNDefineAutoSymbol(self.handle, sym.handle, namespace)
+		core.BNDefineAutoSymbol(self.handle, sym.handle)
 
-	def define_auto_symbol_and_var_or_function(self, sym, sym_type, plat=None, namespace=None):
+	def define_auto_symbol_and_var_or_function(self, sym, sym_type, plat=None):
 		"""
 		``define_auto_symbol_and_var_or_function``
 
@@ -2604,7 +2632,6 @@ class BinaryView(object):
 		:param Symbol sym: the symbol to define
 		:param SymbolType sym_type: Type of symbol being defined
 		:param Platform plat: (optional) platform
-		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
 		if plat is None:
@@ -2613,55 +2640,36 @@ class BinaryView(object):
 			plat = plat.handle
 		if sym_type is not None:
 			sym_type = sym_type.handle
-		if isinstance(namespace, str):
-			namespace = types.NameSpace(namespace)
-		if isinstance(namespace, types.NameSpace):
-			namespace = namespace._get_core_struct()
-		core.BNDefineAutoSymbolAndVariableOrFunction(self.handle, plat, sym.handle, sym_type, namespace)
+		core.BNDefineAutoSymbolAndVariableOrFunction(self.handle, plat, sym.handle, sym_type)
 
-	def undefine_auto_symbol(self, sym, namespace=None):
+	def undefine_auto_symbol(self, sym):
 		"""
 		``undefine_auto_symbol`` removes a symbol from the internal list of automatically discovered Symbol objects.
 
 		:param Symbol sym: the symbol to undefine
-		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		if isinstance(namespace, str):
-			namespace = types.NameSpace(namespace)
-		if isinstance(namespace, types.NameSpace):
-			namespace = namespace._get_core_struct()
-		core.BNUndefineAutoSymbol(self.handle, sym.handle, namespace)
+		core.BNUndefineAutoSymbol(self.handle, sym.handle)
 
-	def define_user_symbol(self, sym, namespace=None):
+	def define_user_symbol(self, sym):
 		"""
 		``define_user_symbol`` adds a symbol to the internal list of user added Symbol objects.
 
 		.. warning:: If multiple symbols for the same address are defined, only the most recent symbol will ever be used.
 
 		:param Symbol sym: the symbol to define
-		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		if isinstance(namespace, str):
-			namespace = types.NameSpace(namespace)
-		if isinstance(namespace, types.NameSpace):
-			namespace = namespace._get_core_struct()
-		core.BNDefineUserSymbol(self.handle, sym.handle, namespace)
+		core.BNDefineUserSymbol(self.handle, sym.handle)
 
-	def undefine_user_symbol(self, sym, namespace=None):
+	def undefine_user_symbol(self, sym):
 		"""
 		``undefine_user_symbol`` removes a symbol from the internal list of user added Symbol objects.
 
 		:param Symbol sym: the symbol to undefine
-		:param NameSpace namespace: the namespace of the symbol
 		:rtype: None
 		"""
-		if isinstance(namespace, str):
-			namespace = types.NameSpace(namespace)
-		if isinstance(namespace, types.NameSpace):
-			namespace = namespace._get_core_struct()
-		core.BNUndefineUserSymbol(self.handle, sym.handle, namespace)
+		core.BNUndefineUserSymbol(self.handle, sym.handle)
 
 	def define_imported_function(self, import_addr_sym, func):
 		"""
@@ -3658,7 +3666,7 @@ class BinaryView(object):
 		seg = core.BNGetSegmentAt(self.handle, addr)
 		if not seg:
 			return None
-		return Segment(seg)
+		return Segment(core.BNNewSegmentReference(seg))
 
 	def get_address_for_data_offset(self, offset):
 		address = ctypes.c_ulonglong()
@@ -3687,7 +3695,7 @@ class BinaryView(object):
 		section_list = core.BNGetSectionsAt(self.handle, addr, count)
 		result = []
 		for i in range(0, count.value):
-			result.append(Section(section_list[i]))
+			result.append(Section(core.BNNewSectionReference(section_list[i])))
 		core.BNFreeSectionList(section_list, count.value)
 		return result
 
@@ -3695,8 +3703,7 @@ class BinaryView(object):
 		section = core.BNGetSectionByName(self.handle, name)
 		if not section:
 			return None
-		result = Section(section)
-		core.BNFreeSection(section)
+		result = Section(core.BNNewSectionReference(section))
 		return result
 
 	def get_unique_section_names(self, name_list):
