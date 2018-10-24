@@ -672,10 +672,12 @@ namespace BinaryNinja
 		DataBuffer(size_t len);
 		DataBuffer(const void* data, size_t len);
 		DataBuffer(const DataBuffer& buf);
+		DataBuffer(DataBuffer&& buf);
 		DataBuffer(BNDataBuffer* buf);
 		~DataBuffer();
 
 		DataBuffer& operator=(const DataBuffer& buf);
+		DataBuffer& operator=(DataBuffer&& buf);
 
 		BNDataBuffer* GetBufferObject() const { return m_buffer; }
 
@@ -1142,8 +1144,6 @@ namespace BinaryNinja
 		void SetDataOffset(uint64_t dataOffset);
 		void SetDataLength(uint64_t dataLength);
 		void SetFlags(uint64_t flags);
-
-		size_t Read(BinaryView* view, uint8_t* dest, uint64_t offset, size_t len);
 	};
 
 	class Section: public CoreRefCountObject<BNSection, BNNewSectionReference, BNFreeSection>
@@ -1246,8 +1246,6 @@ namespace BinaryNinja
 		static bool IsRelocatableCallback(void* ctxt);
 		static size_t GetAddressSizeCallback(void* ctxt);
 		static bool SaveCallback(void* ctxt, BNFileAccessor* file);
-		static void DefineRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target, uint64_t reloc);
-		static void DefineSymbolRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* target, uint64_t reloc);
 	public:
 		BinaryView(BNBinaryView* view);
 
@@ -2187,6 +2185,9 @@ namespace BinaryNinja
 	public:
 		Type(BNType* type);
 
+		bool operator==(const Type& other);
+		bool operator!=(const Type& other);
+
 		BNTypeClass GetClass() const;
 		uint64_t GetWidth() const;
 		size_t GetAlignment() const;
@@ -2211,6 +2212,7 @@ namespace BinaryNinja
 		void SetVolatile(const Confidence<bool>& vltl);
 		void SetTypeName(const QualifiedName& name);
 		Confidence<int64_t> GetStackAdjustment() const;
+		QualifiedName GetStructureName() const;
 
 		uint64_t GetElementCount() const;
 		uint64_t GetOffset() const;
@@ -4215,53 +4217,50 @@ namespace BinaryNinja
 		Ref<Repository> GetDefaultRepository();
 	};
 
-	class Setting
+	class Settings
 	{
+		std::string m_registry;
+
 	public:
-		static bool GetBool(const std::string& settingGroup, const std::string& name, bool defaultValue);
-		static int64_t GetInteger(const std::string& settingGroup, const std::string& name, int64_t defaultValue=0);
-		static std::string GetString(const std::string& settingGroup, const std::string& name, const std::string& defaultValue="");
-		static std::vector<int64_t> GetIntegerList(const std::string& settingGroup, const std::string& name, const std::vector<int64_t>& defaultValue={});
-		static std::vector<std::string> GetStringList(const std::string& settingGroup, const std::string& name, const std::vector<std::string>& defaultValue={});
-		static double GetDouble(const std::string& settingGroup, const std::string& name, double defaultValue=0.0);
+		Settings(const std::string& registry = "default") : m_registry(registry) { }
 
-		static bool IsPresent(const std::string& settingGroup, const std::string& name);
-		static bool IsBool(const std::string& settingGroup, const std::string& name);
-		static bool IsInteger(const std::string& settingGroup, const std::string& name);
-		static bool IsString(const std::string& settingGroup, const std::string& name);
-		static bool IsIntegerList(const std::string& settingGroup, const std::string& name);
-		static bool IsStringList(const std::string& settingGroup, const std::string& name);
-		static bool IsDouble(const std::string& settingGroup, const std::string& name);
+		bool RegisterGroup(const std::string& group, const std::string& title);
+		bool RegisterSetting(const std::string& id, const std::string& properties);
 
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			bool value,
-			bool autoFlush=true);
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			int64_t value,
-			bool autoFlush=true);
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			const std::string& value,
-			bool autoFlush=true);
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			const std::vector<int64_t>& value,
-			bool autoFlush=true);
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			const std::vector<std::string>& value,
-			bool autoFlush=true);
-		static bool Set(const std::string& settingGroup,
-			const std::string& name,
-			double value,
-			bool autoFlush=true);
+		bool UpdateProperty(const std::string& id, const std::string& property);
+		bool UpdateProperty(const std::string& id, const std::string& property, bool value);
+		bool UpdateProperty(const std::string& id, const std::string& property, double value);
+		bool UpdateProperty(const std::string& id, const std::string& property, int value);
+		bool UpdateProperty(const std::string& id, const std::string& property, int64_t value);
+		bool UpdateProperty(const std::string& id, const std::string& property, uint64_t value);
+		bool UpdateProperty(const std::string& id, const std::string& property, const char* value);
+		bool UpdateProperty(const std::string& id, const std::string& property, const std::string& value);
+		bool UpdateProperty(const std::string& id, const std::string& property, const std::vector<std::string>& value);
 
-		static bool RemoveSettingGroup(const std::string& settingGroup, bool autoFlush=true);
-		static bool RemoveSetting(const std::string& settingGroup, const std::string& setting, bool autoFlush=true);
-		static bool FlushSettings();
+		std::string GetSchema();
+
+		bool Reset(const std::string& id, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool ResetAll(Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+
+		template<typename T> T Get(const std::string& id, Ref<BinaryView> view = nullptr, BNSettingsScope* scope = nullptr);
+
+		bool Set(const std::string& id, bool value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, double value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, int value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, int64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, uint64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, const char* value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, const std::string& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& id, const std::vector<std::string>& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 	};
+
+	// explicit specializations
+	template<> bool Settings::Get<bool>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> double Settings::Get<double>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> int64_t Settings::Get<int64_t>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> uint64_t Settings::Get<uint64_t>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> std::string Settings::Get<std::string>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> std::vector<std::string> Settings::Get<std::vector<std::string>>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
 
 	typedef BNMetadataType MetadataType;
 
@@ -4328,5 +4327,31 @@ namespace BinaryNinja
 		bool IsRaw() const;
 		bool IsArray() const;
 		bool IsKeyValueStore() const;
+	};
+
+	class DataRenderer: public CoreRefCountObject<BNDataRenderer, BNNewDataRendererReference, BNFreeDataRenderer>
+	{
+		static bool IsValidForDataCallback(void* ctxt, BNBinaryView* data, uint64_t addr, BNType* type,
+			BNType** typeCtx, size_t ctxCount);
+		static BNDisassemblyTextLine* GetLinesForDataCallback(void* ctxt, BNBinaryView* data, uint64_t addr, BNType* type,
+			const BNInstructionTextToken* prefix, size_t prefixCount, size_t width, size_t* count, BNType** typeCxt,
+			size_t ctxCount);
+		static void FreeCallback(void* ctxt);
+	public:
+		DataRenderer();
+		DataRenderer(BNDataRenderer* renderer);
+		virtual bool IsValidForData(BinaryView* data, uint64_t addr, Type* type, std::vector<Type*>& context);
+		virtual std::vector<DisassemblyTextLine> GetLinesForData(BinaryView* data, uint64_t addr, Type* type,
+			const std::vector<InstructionTextToken>& prefix, size_t width, std::vector<Type*>& context);
+
+		static bool IsStructOfTypeName(Type* type, const QualifiedName& name, std::vector<Type*>& context);
+		static bool IsStructOfTypeName(Type* type, const std::string& name, std::vector<Type*>& context);
+	};
+
+	class DataRendererContainer
+	{
+	public:
+		static void RegisterGenericDataRenderer(DataRenderer* renderer);
+		static void RegisterTypeSpecificDataRenderer(DataRenderer* renderer);
 	};
 }

@@ -156,6 +156,9 @@ extern "C"
 	struct BNSection;
 	struct BNRelocationInfo;
 	struct BNRelocationHandler;
+	struct BNDataBuffer;
+	struct BNDataRenderer;
+	struct BNDataRendererContainer;
 
 	typedef bool (*BNLoadPluginCallback)(const char* repoPath, const char* pluginPath, void* ctx);
 
@@ -1085,8 +1088,6 @@ extern "C"
 		bool (*isRelocatable)(void* ctxt);
 		size_t (*getAddressSize)(void* ctxt);
 		bool (*save)(void* ctxt, BNFileAccessor* accessor);
-		void (*defineRelocation) (void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target, uint64_t reloc);
-		void (*defineSymbolRelocation) (void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* target, uint64_t reloc);
 	};
 
 	struct BNCustomBinaryViewType
@@ -1820,6 +1821,17 @@ extern "C"
 		void (*destructFunction)(void* ctxt, BNFunction* func);
 	};
 
+	struct BNCustomDataRenderer
+	{
+		void* context;
+		void (*freeObject)(void* ctxt);
+		bool (*isValidForData)(void* ctxt, BNBinaryView* view, uint64_t addr, BNType* type, BNType** typeCtx,
+			size_t ctxCount);
+		BNDisassemblyTextLine* (*getLinesForData)(void* ctxt, BNBinaryView* view, uint64_t addr, BNType* type,
+			const BNInstructionTextToken* prefix, size_t prefixCount, size_t width, size_t* count, BNType** typeCtx,
+			size_t ctxCount);
+	};
+
 	enum BNSegmentFlag
 	{
 		SegmentExecutable = 1,
@@ -1929,6 +1941,16 @@ extern "C"
 		ExceedFunctionSizeSkipReason,
 		ExceedFunctionAnalysisTimeSkipReason,
 		NewAutoFunctionAnalysisSuppressedReason
+	};
+
+	enum BNSettingsScope
+	{
+		SettingsInvalidScope = 0,
+		SettingsAutoScope = 1,
+		SettingsDefaultScope = 2,
+		SettingsUserScope = 3,
+		SettingsWorkspaceScope = 4,
+		SettingsContextScope = 5
 	};
 
 	BINARYNINJACOREAPI char* BNAllocString(const char* contents);
@@ -3123,6 +3145,8 @@ extern "C"
 	BINARYNINJACOREAPI BNTypeWithConfidence BNGetMediumLevelILExprType(BNMediumLevelILFunction* func, size_t expr);
 
 	// Types
+	BINARYNINJACOREAPI bool BNTypesEqual(BNType* a, BNType* b);
+	BINARYNINJACOREAPI bool BNTypesNotEqual(BNType* a, BNType* b);
 	BINARYNINJACOREAPI BNType* BNCreateVoidType(void);
 	BINARYNINJACOREAPI BNType* BNCreateBoolType(void);
 	BINARYNINJACOREAPI BNType* BNCreateIntegerType(size_t width, BNBoolWithConfidence* sign, const char* altName);
@@ -3170,6 +3194,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNTypeSetConst(BNType* type, BNBoolWithConfidence* cnst);
 	BINARYNINJACOREAPI void BNTypeSetVolatile(BNType* type, BNBoolWithConfidence* vltl);
 	BINARYNINJACOREAPI BNOffsetWithConfidence BNGetTypeStackAdjustment(BNType* type);
+	BINARYNINJACOREAPI BNQualifiedName BNTypeGetStructureName(BNType* type);
 
 	BINARYNINJACOREAPI char* BNGetTypeString(BNType* type, BNPlatform* platform);
 	BINARYNINJACOREAPI char* BNGetTypeStringBeforeName(BNType* type, BNPlatform* platform);
@@ -3638,36 +3663,34 @@ extern "C"
 	BINARYNINJACOREAPI bool BNFileSize(const char* path, uint64_t* size);
 
 	// Settings APIs
-	BINARYNINJACOREAPI bool BNSettingGetBool(const char* settingGroup, const char* name, bool defaultValue);
-	BINARYNINJACOREAPI int64_t BNSettingGetInteger(const char* settingGroup, const char* name, int64_t defaultValue);
-	BINARYNINJACOREAPI char* BNSettingGetString(const char* settingGroup, const char* name, const char* defaultValue);
-	// intoutSize is number of elements in defaultValue one entry and number of elements in return type on exit
-	BINARYNINJACOREAPI int64_t* BNSettingGetIntegerList(const char* settingGroup, const char* name, int64_t* defaultValue, size_t* inoutSize);
-	// intoutSize is number of elements in defaultValue one entry and number of elements in return type on exit
-	BINARYNINJACOREAPI const char** BNSettingGetStringList(const char* settingGroup, const char* name, const char** defaultValue, size_t* inoutSize);
-	BINARYNINJACOREAPI double BNSettingGetDouble(const char* settingGroup, const char* name, double defaultValue);
+	BINARYNINJACOREAPI bool BNSettingsRegisterGroup(const char* registry, const char* group, const char* title);
+	BINARYNINJACOREAPI bool BNSettingsRegisterSetting(const char* registry, const char* id, const char* properties);
+	BINARYNINJACOREAPI bool BNSettingsUpdateProperty(const char* registry, const char* id, const char* property);
+	BINARYNINJACOREAPI bool BNSettingsUpdateBoolProperty(const char* registry, const char* id, const char* property, bool value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateDoubleProperty(const char* registry, const char* id, const char* property, double value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateInt64Property(const char* registry, const char* id, const char* property, int64_t value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateUInt64Property(const char* registry, const char* id, const char* property, uint64_t value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateStringProperty(const char* registry, const char* id, const char* property, const char* value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateStringListProperty(const char* registry, const char* id, const char* property, const char** value, size_t size);
 
-	BINARYNINJACOREAPI void BNFreeSettingIntegerList(int64_t* integerList);
-	//Check the type of a core setting
-	BINARYNINJACOREAPI bool BNSettingIsBool(const char* name, const char* settingGroup);
-	BINARYNINJACOREAPI bool BNSettingIsInteger(const char* name, const char* settingGroup);
-	BINARYNINJACOREAPI bool BNSettingIsString(const char* name, const char* settingGroup);
-	BINARYNINJACOREAPI bool BNSettingIsStringList(const char* name, const char* settingGroup);
-	BINARYNINJACOREAPI bool BNSettingIsIntegerList(const char* name, const char* settingGroup);
-	BINARYNINJACOREAPI bool BNSettingIsDouble(const char* name, const char* settingGroup);
-	// Check if a plugin setting is present
-	BINARYNINJACOREAPI bool BNSettingIsPresent(const char* settingGroup, const char* name);
+	BINARYNINJACOREAPI char* BNSettingsGetSchema(const char* registry);
 
-	BINARYNINJACOREAPI bool BNSettingSetBool(const char* settingGroup, const char* name, bool value, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingSetInteger(const char* settingGroup, const char* name, int64_t value, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingSetString(const char* settingGroup, const char* name, const char* value, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingSetDouble(const char* settingGroup, const char* name, double value, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingSetIntegerList(const char* settingGroup, const char* name, const int64_t* value, size_t size, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingSetStringList(const char* settingGroup, const char* name, const char** value, size_t size, bool autoFlush);
+	BINARYNINJACOREAPI bool BNSettingsReset(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope scope);
+	BINARYNINJACOREAPI bool BNSettingsResetAll(const char* registry, BNBinaryView* view, BNSettingsScope scope);
 
-	BINARYNINJACOREAPI bool BNSettingRemoveSetting(const char* settingGroup, const char* setting, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingRemoveSettingGroup(const char* settingGroup, bool autoFlush);
-	BINARYNINJACOREAPI bool BNSettingFlushSettings();
+	BINARYNINJACOREAPI bool BNSettingsGetBool(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI double BNSettingsGetDouble(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI int64_t BNSettingsGetInt64(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI uint64_t BNSettingsGetUInt64(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI char* BNSettingsGetString(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI const char** BNSettingsGetStringList(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope, size_t* inoutSize);
+
+	BINARYNINJACOREAPI bool BNSettingsSetBool(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, bool value);
+	BINARYNINJACOREAPI bool BNSettingsSetDouble(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, double value);
+	BINARYNINJACOREAPI bool BNSettingsSetInt64(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, int64_t value);
+	BINARYNINJACOREAPI bool BNSettingsSetUInt64(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, uint64_t value);
+	BINARYNINJACOREAPI bool BNSettingsSetString(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, const char* value);
+	BINARYNINJACOREAPI bool BNSettingsSetStringList(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, const char** value, size_t size);
 
 	//Metadata APIs
 
@@ -3754,7 +3777,6 @@ extern "C"
 	BINARYNINJACOREAPI void BNSegmentSetDataOffset(BNSegment* segment, uint64_t dataOffset);
 	BINARYNINJACOREAPI void BNSegmentSetDataLength(BNSegment* segment, uint64_t dataLength);
 	BINARYNINJACOREAPI void BNSegmentSetFlags(BNSegment* segment, uint32_t flags);
-	BINARYNINJACOREAPI size_t BNSegmentRead(BNSegment* segment, BNBinaryView* view, uint8_t* dest, uint64_t offset, size_t len);
 
 	// Section object methods
 	BINARYNINJACOREAPI BNSection* BNNewSectionReference(BNSection* section);
@@ -3771,6 +3793,19 @@ extern "C"
 	BINARYNINJACOREAPI uint64_t BNSectionGetEntrySize(BNSection* section);
 	BINARYNINJACOREAPI BNSectionSemantics BNSectionGetSemantics(BNSection* section);
 	BINARYNINJACOREAPI bool BNSectionIsAutoDefined(BNSection* section);
+
+	// Custom Data Render methods
+	BINARYNINJACOREAPI BNDataRenderer* BNCreateDataRenderer(BNCustomDataRenderer* renderer);
+	BINARYNINJACOREAPI BNDataRenderer* BNNewDataRendererReference(BNDataRenderer* renderer);
+	BINARYNINJACOREAPI bool BNIsValidForData(void* ctxt, BNBinaryView* view, uint64_t addr, BNType* type,
+		BNType** typeCtx, size_t ctxCount);
+	BINARYNINJACOREAPI BNDisassemblyTextLine* BNGetLinesForData(void* ctxt, BNBinaryView* view, uint64_t addr,
+		BNType* type, const BNInstructionTextToken* prefix, size_t prefixCount, size_t width, size_t* count,
+		BNType** typeCtx, size_t ctxCount);
+	BINARYNINJACOREAPI void BNFreeDataRenderer(BNDataRenderer* renderer);
+	BINARYNINJACOREAPI BNDataRendererContainer* BNGetDataRendererContainer();
+	BINARYNINJACOREAPI void BNRegisterGenericDataRenderer(BNDataRendererContainer* container, BNDataRenderer* renderer);
+	BINARYNINJACOREAPI void BNRegisterTypeSpecificDataRenderer(BNDataRendererContainer* container, BNDataRenderer* renderer);
 #ifdef __cplusplus
 }
 #endif

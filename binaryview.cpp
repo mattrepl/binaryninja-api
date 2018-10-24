@@ -394,12 +394,6 @@ void Segment::SetFlags(uint64_t flags)
 }
 
 
-size_t Segment::Read(BinaryView* view, uint8_t* dest, uint64_t offset, size_t len)
-{
-	return BNSegmentRead(m_object, view->GetObject(), dest, offset, len);
-}
-
-
 Section::Section(BNSection* sec)
 {
 	m_object = sec;
@@ -497,8 +491,6 @@ BinaryView::BinaryView(const std::string& typeName, FileMetadata* file, BinaryVi
 	view.isRelocatable = IsRelocatableCallback;
 	view.getAddressSize = GetAddressSizeCallback;
 	view.save = SaveCallback;
-	view.defineRelocation = DefineRelocationCallback;
-	view.defineSymbolRelocation = DefineSymbolRelocationCallback;
 	m_file = file;
 	AddRefForRegistration();
 	m_object = BNCreateCustomBinaryView(typeName.c_str(), m_file->GetObject(),
@@ -658,27 +650,6 @@ bool BinaryView::SaveCallback(void* ctxt, BNFileAccessor* file)
 	BinaryView* view = (BinaryView*)ctxt;
 	CoreFileAccessor accessor(file);
 	return view->PerformSave(&accessor);
-}
-
-
-void BinaryView::DefineRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, uint64_t target,
-	uint64_t reloc)
-{
-	BinaryView* view = (BinaryView*)ctxt;
-	BNRelocationInfo curInfo = *info;
-	Architecture* curArch = new CoreArchitecture(arch);
-	return view->PerformDefineRelocation(curArch, curInfo, target, reloc);
-}
-
-
-void BinaryView::DefineSymbolRelocationCallback(void* ctxt, BNArchitecture* arch, BNRelocationInfo* info, BNSymbol* sym,
-	uint64_t reloc)
-{
-	BinaryView* view = (BinaryView*)ctxt;
-	BNRelocationInfo curInfo = *info;
-	Architecture* curArch = new CoreArchitecture(arch);
-	Ref<Symbol> curSymbol = new Symbol(sym);
-	return view->PerformDefineRelocation(curArch, curInfo, curSymbol, reloc);
 }
 
 
@@ -1459,6 +1430,7 @@ Ref<Symbol> BinaryView::GetSymbolByRawName(const string& name, const NameSpace& 
 {
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol* sym = BNGetSymbolByRawName(m_object, name.c_str(), &ns);
+	NameSpace::FreeAPIObject(&ns);
 	if (!sym)
 		return nullptr;
 	return new Symbol(sym);
@@ -1470,6 +1442,7 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsByName(const string& name, const NameS
 	size_t count;
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol** syms = BNGetSymbolsByName(m_object, name.c_str(), &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1486,6 +1459,7 @@ vector<Ref<Symbol>> BinaryView::GetSymbols(const NameSpace& nameSpace)
 	size_t count;
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol** syms = BNGetSymbols(m_object, &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1502,6 +1476,7 @@ vector<Ref<Symbol>> BinaryView::GetSymbols(uint64_t start, uint64_t len, const N
 	size_t count;
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol** syms = BNGetSymbolsInRange(m_object, start, len, &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1518,6 +1493,7 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, const NameSp
 	size_t count;
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol** syms = BNGetSymbolsOfType(m_object, type, &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1534,6 +1510,7 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, uint64_t sta
 	size_t count;
 	BNNameSpace ns = nameSpace.GetAPIObject();
 	BNSymbol** syms = BNGetSymbolsOfTypeInRange(m_object, type, start, len, &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
 
 	vector<Ref<Symbol>> result;
 	result.reserve(count);
@@ -1729,6 +1706,11 @@ uint64_t BinaryView::GetPreviousBasicBlockEndBeforeAddress(uint64_t addr)
 uint64_t BinaryView::GetPreviousDataBeforeAddress(uint64_t addr)
 {
 	return BNGetPreviousDataBeforeAddress(m_object, addr);
+}
+
+uint64_t BinaryView::GetPreviousDataVariableBeforeAddress(uint64_t addr)
+{
+	return BNGetPreviousDataVariableBeforeAddress(m_object, addr);
 }
 
 

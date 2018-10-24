@@ -208,7 +208,7 @@ string NameList::GetString() const
 	{
 		if (!first)
 		{
-			out = m_join + name;
+			out += m_join + name;
 		}
 		else
 		{
@@ -439,6 +439,17 @@ NameSpace NameSpace::FromAPIObject(const BNNameSpace* name)
 Type::Type(BNType* type)
 {
 	m_object = type;
+}
+
+bool Type::operator==(const Type& other)
+{
+	return BNTypesEqual(m_object, other.m_object);
+}
+
+
+bool Type::operator!=(const Type& other)
+{
+	return BNTypesNotEqual(m_object, other.m_object);
 }
 
 
@@ -961,6 +972,15 @@ void Type::SetTypeName(const QualifiedName& names)
 Confidence<Ref<Type>> Type::WithConfidence(uint8_t conf)
 {
 	return Confidence<Ref<Type>>(this, conf);
+}
+
+
+QualifiedName Type::GetStructureName() const
+{
+	BNQualifiedName name = BNTypeGetStructureName(m_object);
+	QualifiedName result = QualifiedName::FromAPIObject(&name);
+	BNFreeQualifiedName(&name);
+	return result;
 }
 
 
