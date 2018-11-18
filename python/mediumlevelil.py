@@ -43,7 +43,7 @@ class SSAVariable(object):
 		return "<ssa %s version %d>" % (repr(self.var), self.version)
 
 	def __eq__(self, other):
-		return (
+		return isinstance(other, SSAVariable) and (
 			(self.var, self.version) ==
 			(other.var, other.version)
 		)
@@ -70,6 +70,14 @@ class MediumLevelILOperationAndSize(object):
 		if self.size == 0:
 			return "<%s>" % self.operation.name
 		return "<%s %d>" % (self.operation.name, self.size)
+
+	def __eq__(self, other):
+		if isinstance(other, MediumLevelILOperation):
+			return other == self.operation
+		if isinstance(other, MediumLevelILOperationAndSize):
+			return other.size == self.size and other.operation == self.operation
+		else:
+			return False
 
 
 class MediumLevelILInstruction(object):

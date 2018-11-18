@@ -1415,6 +1415,26 @@ vector<ReferenceSource> BinaryView::GetCodeReferences(uint64_t addr, uint64_t le
 }
 
 
+vector<uint64_t> BinaryView::GetDataReferences(uint64_t addr)
+{
+	size_t count;
+	uint64_t* refs = BNGetDataReferences(m_object, addr, &count);
+	vector<uint64_t> result(refs, &refs[count]);
+	BNFreeDataReferences(refs);
+	return result;
+}
+
+
+vector<uint64_t> BinaryView::GetDataReferences(uint64_t addr, uint64_t len)
+{
+	size_t count;
+	uint64_t* refs = BNGetDataReferencesInRange(m_object, addr, len, &count);
+	vector<uint64_t> result(refs, &refs[count]);
+	BNFreeDataReferences(refs);
+	return result;
+}
+
+
 Ref<Symbol> BinaryView::GetSymbolByAddress(uint64_t addr, const NameSpace& nameSpace)
 {
 	BNNameSpace ns = nameSpace.GetAPIObject();
@@ -1969,6 +1989,17 @@ bool BinaryView::FindNextData(uint64_t start, const DataBuffer& data, uint64_t& 
 	return BNFindNextData(m_object, start, data.GetBufferObject(), &result, flags);
 }
 
+bool BinaryView::FindNextText(uint64_t start, const std::string& data, uint64_t& result,
+	Ref<DisassemblySettings> settings, BNFindFlag flags)
+{
+	return BNFindNextText(m_object, start, data.c_str(), &result, settings->GetObject(), flags);
+}
+
+bool BinaryView::FindNextConstant(uint64_t start, uint64_t constant, uint64_t& result, Ref<DisassemblySettings> settings)
+{
+	return BNFindNextConstant(m_object, start, constant, &result, settings->GetObject());
+}
+
 
 void BinaryView::Reanalyze()
 {
@@ -2280,6 +2311,20 @@ NameSpace BinaryView::GetExternalNameSpace()
 	NameSpace nameSpace = NameSpace::FromAPIObject(&ns);
 	BNFreeNameSpace(&ns);
 	return nameSpace;
+}
+
+
+bool BinaryView::ParseExpression(const string& expression, uint64_t &offset, uint64_t here, string& errorString)
+{
+	char* err = nullptr;
+	if (!BNParseExpression(m_object, expression.c_str(), &offset, here, &err))
+	{
+		LogDebug("Failed to parse expression: '%s': Error: '%s'", expression.c_str(), err);
+		errorString = string(err);
+		BNFreeParseError(err);
+		return false;
+	}
+	return true;
 }
 
 
