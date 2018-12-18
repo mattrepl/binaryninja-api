@@ -97,6 +97,7 @@ Switching views happens multiple ways. In some instances, it's automatic (clicki
  - `x` : Focuses the cross-reference pane
  - `;` : Adds a comment
  - `i` : Cycles between disassembly, low-level il, and medium-level il in graph view
+ - `t` : Switch to type view
  - `y` : Change type
  - `a` : Change the data type to an ASCII string
  - [1248] : Change type directly to a data variable of the indicated widths
@@ -254,7 +255,7 @@ On windows, this is achieved through a separate launcher that loads first and re
 
 ## Settings
 
-Settings are stored in the _user_ directory in the file `settings.json`. Each top level object in this file is represents a different plugin.  As of build 860 the following settings are available:
+Settings are stored in the [_user_ directory](#user-folder) in the file `settings.json`. Each top level object in this file is represents a different plugin.  As of build 860 the following settings are available:
 
 |Plugin           | Setting                  | Type         | Default                                            | Description                                                                                         |
 |----------------:|-------------------------:|-------------:|---------------------------------------------------:|:----------------------------------------------------------------------------------------------------|

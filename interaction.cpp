@@ -105,7 +105,9 @@ FormInputField FormInputField::DirectoryName(const string& prompt, const string&
 void InteractionHandler::ShowMarkdownReport(Ref<BinaryView> view, const string& title, const string& contents,
 	const string& plainText)
 {
-	ShowHTMLReport(view, title, MarkdownToHTML(contents), plainText);
+	(void)contents;
+	if (plainText.size() != 0)
+		ShowPlainTextReport(view, title, plainText);
 }
 
 

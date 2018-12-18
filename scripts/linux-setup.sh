@@ -65,12 +65,14 @@ lastrun()
 pythonpath()
 {
 	echo Configuring python path
-	if [[ $(python -V) == "Python 3."* ]]
+	if [ "$USERINTERACTIVE" == "true" ]
 	then
-	    ${SUDO}python2 ${BNPATH}/scripts/install_api.py $ROOT
+		SILENT="-s"
 	else
-	    ${SUDO}python ${BNPATH}/scripts/install_api.py $ROOT
+		SILENT=""
 	fi
+	python -V >/dev/null 2>&1 && ${SUDO}python ${BNPATH}/scripts/install_api.py ${ROOT} ${SILENT}
+	python3 -V >/dev/null 2>&1 && ${SUDO}python3 ${BNPATH}/scripts/install_api.py ${ROOT} ${SILENT}
 }
 
 createdesktopfile()
@@ -139,6 +141,7 @@ CREATEDESKTOP=true
 CREATEMIME=true
 ADDTODESKTOP=true
 CREATELASTRUN=true
+USERINTERACTIVE=true
 PYTHONPATH=true
 UNINSTALL=false
 
@@ -158,6 +161,7 @@ do
 		;;
 		-d)
 		ADDTODESKTOP=false
+		CREATEDESKTOP=false
 		;;
 		-m)
 		CREATEMIME=false
@@ -169,6 +173,7 @@ do
 		ADDTODESKTOP=false
 		CREATEMIME=false
 		CREATEDESKTOP=false
+		USERINTERACTIVE=false
 		;;
 		-h|*)
 		usage

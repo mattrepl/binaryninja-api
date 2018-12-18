@@ -229,29 +229,67 @@ def _init_plugins():
 
 _destruct_callbacks = _DestructionCallbackHandler()
 
-bundled_plugin_path = core.BNGetBundledPluginDirectory()
-user_plugin_path = core.BNGetUserPluginDirectory()
+def bundled_plugin_path():
+	"""
+		``bundled_plugin_path`` returns a string containing the current plugin path inside the `install path <https://docs.binary.ninja/getting-started.html#binary-path>`_
 
-core_version = core.BNGetVersionString()
-'''Core version'''
+		:return: current bundled plugin path
+		:rtype: str, or None on failure
+	"""
+	return core.BNGetBundledPluginDirectory()
 
-core_build_id = core.BNGetBuildId()
-'''Build ID'''
+def user_plugin_path():
+	"""
+		``user_plugin_path`` returns a string containing the current plugin path inside the `user directory <https://docs.binary.ninja/getting-started.html#user-folder>`_
 
-core_serial = core.BNGetSerialNumber()
-'''Serial Number'''
+		:return: current user plugin path
+		:rtype: str, or None on failure
+	"""
+	return core.BNGetUserPluginDirectory()
 
-core_expires = gmtime(core.BNGetLicenseExpirationTime())
-'''License Expiration'''
+def core_version():
+	"""
+		``core_version`` returns a string containing the current version
 
-core_product = core.BNGetProduct()
-'''Product string from the license file'''
+		:return: current version
+		:rtype: str, or None on failure
+	"""
+	return core.BNGetVersionString()
 
-core_product_type = core.BNGetProductType()
-'''Product type from the license file'''
+def core_build_id():
+	"""
+		``core_build_id`` returns a string containing the current build id
 
-core_license_count = core.BNGetLicenseCount()
-'''License count from the license file'''
+		:return: current build id
+		:rtype: str, or None on failure
+	"""
+	core.BNGetBuildId()
 
-core_ui_enabled = core.BNIsUIEnabled()
-'''Indicates that a UI exists and the UI has invoked BNInitUI'''
+def core_serial():
+	"""
+		``core_serial`` returns a string containing the current serial number
+
+		:return: current serial
+		:rtype: str, or None on failure
+	"""
+	return core.BNGetSerialNumber()
+
+def core_expires():
+	'''License Expiration'''
+	return gmtime(core.BNGetLicenseExpirationTime())
+
+def core_product():
+	'''Product string from the license file'''
+	return core.BNGetProduct()
+
+def core_product_type():
+	'''Product type from the license file'''
+	return core.BNGetProductType()
+
+def core_license_count():
+	'''License count from the license file'''
+	return core.BNGetLicenseCount()
+
+def core_ui_enabled():
+	'''Indicates that a UI exists and the UI has invoked BNInitUI'''
+	return core.BNIsUIEnabled()

@@ -1037,17 +1037,23 @@ namespace BinaryNinja
 		BNInstructionTextTokenContext context;
 		uint8_t confidence;
 		uint64_t address;
+		std::vector<std::string> typeNames;
 
 		InstructionTextToken();
 		InstructionTextToken(uint8_t confidence, BNInstructionTextTokenType t, const std::string& txt);
 		InstructionTextToken(BNInstructionTextTokenType type, const std::string& text, uint64_t value = 0,
-			size_t size = 0, size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE);
+			size_t size = 0, size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE,
+			const std::vector<std::string>& typeName={});
 		InstructionTextToken(BNInstructionTextTokenType type, BNInstructionTextTokenContext context,
 			const std::string& text, uint64_t address, uint64_t value = 0, size_t size = 0,
-			size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE);
+			size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE, const std::vector<std::string>& typeName={});
 
 		InstructionTextToken WithConfidence(uint8_t conf);
+		static BNInstructionTextToken* CreateInstructionTextTokenList(const std::vector<InstructionTextToken>& tokens);
+		static std::vector<InstructionTextToken> ConvertAndFreeInstructionTextTokenList(BNInstructionTextToken* tokens, size_t count);
+		static std::vector<InstructionTextToken> ConvertInstructionTextTokenList(const BNInstructionTextToken* tokens, size_t count);
 	};
+
 
 	struct DisassemblyTextLine
 	{
@@ -1495,7 +1501,7 @@ namespace BinaryNinja
 		static NameSpace GetInternalNameSpace();
 		static NameSpace GetExternalNameSpace();
 
-		bool ParseExpression(const std::string& expression, uint64_t &offset, uint64_t here, std::string& errorString);
+		static bool ParseExpression(Ref<BinaryView> view, const std::string& expression, uint64_t &offset, uint64_t here, std::string& errorString);
 	};
 
 
@@ -3739,6 +3745,7 @@ namespace BinaryNinja
 
 		std::string GetName() const { return m_command.name; }
 		std::string GetDescription() const { return m_command.description; }
+		BNPluginCommandType GetType() const { return m_command.type; }
 
 		bool IsValid(const PluginCommandContext& ctxt) const;
 		void Execute(const PluginCommandContext& ctxt) const;

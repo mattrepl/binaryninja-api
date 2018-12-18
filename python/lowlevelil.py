@@ -524,17 +524,7 @@ class LowLevelILInstruction(object):
 			if not core.BNGetLowLevelILExprText(self.function.handle, self.function.arch.handle,
 				self.expr_index, tokens, count):
 				return None
-		result = []
-		for i in range(0, count.value):
-			token_type = InstructionTextTokenType(tokens[i].type)
-			text = tokens[i].text
-			value = tokens[i].value
-			size = tokens[i].size
-			operand = tokens[i].operand
-			context = tokens[i].context
-			confidence = tokens[i].confidence
-			address = tokens[i].address
-			result.append(binaryninja.function.InstructionTextToken(token_type, text, value, size, operand, context, address, confidence))
+		result = binaryninja.function.InstructionTextToken.get_instruction_lines(tokens, count.value)
 		core.BNFreeInstructionText(tokens, count.value)
 		return result
 
@@ -721,7 +711,7 @@ class LowLevelILFunction(object):
 		LLFC_ULE                u<=        Unsigned less than or equal
 		LLFC_SGE                s>=        Signed greater than or equal
 		LLFC_UGE                u>=        Unsigned greater than or equal
-		LLFC_SGT                s>         Signed greather than
+		LLFC_SGT                s>         Signed greater than
 		LLFC_UGT                u>         Unsigned greater than
 		LLFC_NEG                -          Negative
 		LLFC_POS                +          Positive
@@ -790,6 +780,13 @@ class LowLevelILFunction(object):
 			result.append(LowLevelILBasicBlock(view, core.BNNewBasicBlockReference(blocks[i]), self))
 		core.BNFreeBasicBlockList(blocks, count.value)
 		return result
+
+	@property
+	def instructions(self):
+		"""A generator of llil instructions of the current llil function"""
+		for block in self.basic_blocks:
+			for i in block:
+				yield i
 
 	@property
 	def ssa_form(self):

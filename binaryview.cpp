@@ -1772,20 +1772,7 @@ vector<LinearDisassemblyLine> BinaryView::GetPreviousLinearDisassemblyLines(Line
 		line.contents.addr = lines[i].contents.addr;
 		line.contents.instrIndex = lines[i].contents.instrIndex;
 		line.contents.highlight = lines[i].contents.highlight;
-		line.contents.tokens.reserve(lines[i].contents.count);
-		for (size_t j = 0; j < lines[i].contents.count; j++)
-		{
-			InstructionTextToken token;
-			token.type = lines[i].contents.tokens[j].type;
-			token.text = lines[i].contents.tokens[j].text;
-			token.value = lines[i].contents.tokens[j].value;
-			token.size = lines[i].contents.tokens[j].size;
-			token.operand = lines[i].contents.tokens[j].operand;
-			token.context = lines[i].contents.tokens[j].context;
-			token.confidence = lines[i].contents.tokens[j].confidence;
-			token.address = lines[i].contents.tokens[j].address;
-			line.contents.tokens.push_back(token);
-		}
+		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
 		result.push_back(line);
 	}
 
@@ -1822,20 +1809,7 @@ vector<LinearDisassemblyLine> BinaryView::GetNextLinearDisassemblyLines(LinearDi
 		line.contents.addr = lines[i].contents.addr;
 		line.contents.instrIndex = lines[i].contents.instrIndex;
 		line.contents.highlight = lines[i].contents.highlight;
-		line.contents.tokens.reserve(lines[i].contents.count);
-		for (size_t j = 0; j < lines[i].contents.count; j++)
-		{
-			InstructionTextToken token;
-			token.type = lines[i].contents.tokens[j].type;
-			token.text = lines[i].contents.tokens[j].text;
-			token.value = lines[i].contents.tokens[j].value;
-			token.size = lines[i].contents.tokens[j].size;
-			token.operand = lines[i].contents.tokens[j].operand;
-			token.context = lines[i].contents.tokens[j].context;
-			token.confidence = lines[i].contents.tokens[j].confidence;
-			token.address = lines[i].contents.tokens[j].address;
-			line.contents.tokens.push_back(token);
-		}
+		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
 		result.push_back(line);
 	}
 
@@ -2354,10 +2328,10 @@ NameSpace BinaryView::GetExternalNameSpace()
 }
 
 
-bool BinaryView::ParseExpression(const string& expression, uint64_t &offset, uint64_t here, string& errorString)
+bool BinaryView::ParseExpression(Ref<BinaryView> view, const string& expression, uint64_t &offset, uint64_t here, string& errorString)
 {
 	char* err = nullptr;
-	if (!BNParseExpression(m_object, expression.c_str(), &offset, here, &err))
+	if (!BNParseExpression(view ? view->GetObject() : nullptr, expression.c_str(), &offset, here, &err))
 	{
 		LogDebug("Failed to parse expression: '%s': Error: '%s'", expression.c_str(), err);
 		errorString = string(err);

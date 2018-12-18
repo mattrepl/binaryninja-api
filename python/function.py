@@ -504,6 +504,11 @@ class Function(object):
 
 	@property
 	def low_level_il(self):
+		"""Deprecated property provided for compatibility. Use llil instead."""
+		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, core.BNGetFunctionLowLevelIL(self.handle), self)
+
+	@property
+	def llil(self):
 		"""returns LowLevelILFunction used to represent Function low level IL (read-only)"""
 		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, core.BNGetFunctionLowLevelIL(self.handle), self)
 
@@ -514,6 +519,11 @@ class Function(object):
 
 	@property
 	def medium_level_il(self):
+		"""Deprecated property provided for compatibility. Use mlil instead."""
+		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, core.BNGetFunctionMediumLevelIL(self.handle), self)
+
+	@property
+	def mlil(self):
 		"""Function medium level IL (read-only)"""
 		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, core.BNGetFunctionMediumLevelIL(self.handle), self)
 
@@ -787,13 +797,13 @@ class Function(object):
 	@property
 	def llil_basic_blocks(self):
 		"""A generator of all LowLevelILBasicBlock objects in the current function"""
-		for block in self.low_level_il:
+		for block in self.llil:
 			yield block
 
 	@property
 	def mlil_basic_blocks(self):
 		"""A generator of all MediumLevelILBasicBlock objects in the current function"""
-		for block in self.medium_level_il:
+		for block in self.mlil:
 			yield block
 
 	@property
@@ -807,17 +817,13 @@ class Function(object):
 
 	@property
 	def llil_instructions(self):
-		"""A generator of llil instructions of the current function"""
-		for block in self.llil_basic_blocks:
-			for i in block:
-				yield i
+		"""Deprecated method provided for compatibility. Use llil.instructions instead.  Was: A generator of llil instructions of the current function"""
+		return self.llil.instructions
 
 	@property
 	def mlil_instructions(self):
-		"""A generator of mlil instructions of the current function"""
-		for block in self.mlil_basic_blocks:
-			for i in block:
-				yield i
+		"""Deprecated method provided for compatibility. Use mlil.instructions instead.  Was: A generator of mlil instructions of the current function"""
+		return self.mlil.instructions
 
 	@property
 	def too_large(self):
@@ -887,7 +893,7 @@ class Function(object):
 		return core.BNGetCommentForAddress(self.handle, addr)
 
 	def set_comment(self, addr, comment):
-		"""Deprecated use set_comment_at instead"""
+		"""Deprecated method provided for compatibility. Use set_comment_at instead."""
 		core.BNSetCommentForAddress(self.handle, addr, comment)
 
 	def set_comment_at(self, addr, comment):
@@ -922,10 +928,10 @@ class Function(object):
 
 		idx = core.BNGetLowLevelILForInstruction(self.handle, arch.handle, addr)
 
-		if idx == len(self.low_level_il):
+		if idx == len(self.llil):
 			return None
 
-		return self.low_level_il[idx]
+		return self.llil[idx]
 
 	def get_low_level_il_exits_at(self, addr, arch=None):
 		if arch is None:
@@ -1159,7 +1165,7 @@ class Function(object):
 		count = ctypes.c_ulonglong()
 		branches = core.BNGetIndirectBranchesAt(self.handle, arch.handle, addr, count)
 		result = []
-		for i in range(0, count.value):
+		for i in range(count.value):
 			result.append(IndirectBranchInfo(binaryninja.architecture.CoreArchitecture._from_cache(branches[i].sourceArch), branches[i].sourceAddr, binaryninja.architecture.CoreArchitecture._from_cache(branches[i].destArch), branches[i].destAddr, branches[i].autoDefined))
 		core.BNFreeIndirectBranchList(branches)
 		return result
@@ -1170,21 +1176,8 @@ class Function(object):
 		count = ctypes.c_ulonglong(0)
 		lines = core.BNGetFunctionBlockAnnotations(self.handle, arch.handle, addr, count)
 		result = []
-		for i in range(0, count.value):
-			tokens = []
-			for j in range(0, lines[i].count):
-				token_type = InstructionTextTokenType(lines[i].tokens[j].type)
-				text = lines[i].tokens[j].text
-				if not isinstance(text, str):
-					text = text.encode("charmap")
-				value = lines[i].tokens[j].value
-				size = lines[i].tokens[j].size
-				operand = lines[i].tokens[j].operand
-				context = lines[i].tokens[j].context
-				confidence = lines[i].tokens[j].confidence
-				address = lines[i].tokens[j].address
-				tokens.append(InstructionTextToken(token_type, text, value, size, operand, context, address, confidence))
-			result.append(tokens)
+		for i in range(count.value):
+			result.append(InstructionTextToken.get_instruction_lines(lines[i].tokens, lines[i].count))
 		core.BNFreeInstructionTextLines(lines, count.value)
 		return result
 
@@ -1482,17 +1475,7 @@ class Function(object):
 		for i in range(0, count.value):
 			addr = lines[i].addr
 			color = highlight.HighlightColor._from_core_struct(lines[i].highlight)
-			tokens = []
-			for j in range(0, lines[i].count):
-				token_type = InstructionTextTokenType(lines[i].tokens[j].type)
-				text = lines[i].tokens[j].text
-				value = lines[i].tokens[j].value
-				size = lines[i].tokens[j].size
-				operand = lines[i].tokens[j].operand
-				context = lines[i].tokens[j].context
-				confidence = lines[i].tokens[j].confidence
-				address = lines[i].tokens[j].address
-				tokens.append(InstructionTextToken(token_type, text, value, size, operand, context, address, confidence))
+			tokens = InstructionTextToken.get_instruction_lines(lines[i].tokens, lines[i].count)
 			result.append(DisassemblyTextLine(tokens, addr, color = color))
 		core.BNFreeDisassemblyTextLines(lines, count.value)
 		return result
@@ -1810,7 +1793,7 @@ class InstructionTextToken(object):
 
 	"""
 	def __init__(self, token_type, text, value = 0, size = 0, operand = 0xffffffff,
-		context = InstructionTextTokenContext.NoTokenContext, address = 0, confidence = types.max_confidence):
+		context = InstructionTextTokenContext.NoTokenContext, address = 0, confidence = types.max_confidence, typeNames=[]):
 		self.type = InstructionTextTokenType(token_type)
 		self.text = text
 		self.value = value
@@ -1819,6 +1802,48 @@ class InstructionTextToken(object):
 		self.context = InstructionTextTokenContext(context)
 		self.confidence = confidence
 		self.address = address
+		self.typeNames = typeNames
+
+	@classmethod
+	def get_instruction_lines(cls, tokens, count=0):
+		""" Helper method for converting between core.BNInstructionTextToken and InstructionTextToken lists """
+		if isinstance(tokens, list):
+			result = (core.BNInstructionTextToken * len(tokens))()
+			for j in range(len(tokens)):
+				result[j].type = tokens[j].type
+				result[j].text = tokens[j].text
+				result[j].value = tokens[j].value
+				result[j].size = tokens[j].size
+				result[j].operand = tokens[j].operand
+				result[j].context = tokens[j].context
+				result[j].confidence = tokens[j].confidence
+				result[j].address = tokens[j].address
+				result[j].nameCount = len(tokens[j].typeNames)
+				result[j].typeNames = (ctypes.c_char_p * len(tokens[j].typeNames))()
+				for i in range(len(tokens[j].typeNames)):
+					result[j].typeNames[i] = binaryninja.cstr(tokens[j].typeNames[i])
+			return result
+
+		result = []
+		for j in range(count):
+			token_type = InstructionTextTokenType(tokens[j].type)
+			text = tokens[j].text
+			if not isinstance(text, str):
+				text = text.decode("charmap")
+			value = tokens[j].value
+			size = tokens[j].size
+			operand = tokens[j].operand
+			context = tokens[j].context
+			confidence = tokens[j].confidence
+			address = tokens[j].address
+			typeNames = []
+			for i in range(tokens[j].namesCount):
+				if not isinstance(tokens[j].typeNames[i], str):
+					typeNames.append(tokens[j].typeNames[i].decode("charmap"))
+				else:
+					typeNames.append(tokens[j].typeNames[i])
+			result.append(InstructionTextToken(token_type, text, value, size, operand, context, address, confidence, typeNames))
+		return result
 
 	def __str__(self):
 		return self.text

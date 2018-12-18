@@ -95,26 +95,12 @@ const vector<DisassemblyTextLine>& FlowGraphNode::GetLines()
 		line.addr = lines[i].addr;
 		line.instrIndex = lines[i].instrIndex;
 		line.highlight = lines[i].highlight;
-		line.tokens.reserve(lines[i].count);
-		for (size_t j = 0; j < lines[i].count; j++)
-		{
-			InstructionTextToken token;
-			token.type = lines[i].tokens[j].type;
-			token.text = lines[i].tokens[j].text;
-			token.value = lines[i].tokens[j].value;
-			token.size = lines[i].tokens[j].size;
-			token.operand = lines[i].tokens[j].operand;
-			token.context = lines[i].tokens[j].context;
-			token.confidence = lines[i].tokens[j].confidence;
-			token.address = lines[i].tokens[j].address;
-			line.tokens.push_back(token);
-		}
+		line.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].tokens, lines[i].count);
 		result.push_back(line);
 	}
 
 	BNFreeDisassemblyTextLines(lines, count);
 	m_cachedLines = result;
-	m_cachedLinesValid = true;
 	return m_cachedLines;
 }
 
@@ -124,35 +110,15 @@ void FlowGraphNode::SetLines(const vector<DisassemblyTextLine>& lines)
 	BNDisassemblyTextLine* buf = new BNDisassemblyTextLine[lines.size()];
 	for (size_t i = 0; i < lines.size(); i++)
 	{
-		const DisassemblyTextLine& line = lines[i];
-		buf[i].addr = line.addr;
-		buf[i].instrIndex = line.instrIndex;
-		buf[i].highlight = line.highlight;
-		buf[i].tokens = new BNInstructionTextToken[line.tokens.size()];
-		buf[i].count = line.tokens.size();
-		for (size_t j = 0; j < line.tokens.size(); j++)
-		{
-			const InstructionTextToken& token = line.tokens[j];
-			buf[i].tokens[j].type = token.type;
-			buf[i].tokens[j].text = BNAllocString(token.text.c_str());
-			buf[i].tokens[j].value = token.value;
-			buf[i].tokens[j].size = token.size;
-			buf[i].tokens[j].operand = token.operand;
-			buf[i].tokens[j].context = token.context;
-			buf[i].tokens[j].confidence = token.confidence;
-			buf[i].tokens[j].address = token.address;
-		}
+		buf[i].addr = lines[i].addr;
+		buf[i].instrIndex = lines[i].instrIndex;
+		buf[i].highlight = lines[i].highlight;
+		buf[i].tokens = InstructionTextToken::CreateInstructionTextTokenList(lines[i].tokens);
+		buf[i].count = lines[i].tokens.size();
 	}
 
 	BNSetFlowGraphNodeLines(m_object, buf, lines.size());
-
-	for (size_t i = 0; i < lines.size(); i++)
-	{
-		for (size_t j = 0; j < buf[i].count; j++)
-			BNFreeString(buf[i].tokens[j].text);
-		delete[] buf[i].tokens;
-	}
-	delete[] buf;
+	BNFreeDisassemblyTextLines(buf, lines.size());
 
 	m_cachedLines = lines;
 	m_cachedLinesValid = true;

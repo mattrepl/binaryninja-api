@@ -331,17 +331,7 @@ class MediumLevelILInstruction(object):
 			if not core.BNGetMediumLevelILExprText(self.function.handle, self.function.arch.handle,
 				self.expr_index, tokens, count):
 				return None
-		result = []
-		for i in range(0, count.value):
-			token_type = InstructionTextTokenType(tokens[i].type)
-			text = tokens[i].text
-			value = tokens[i].value
-			size = tokens[i].size
-			operand = tokens[i].operand
-			context = tokens[i].context
-			confidence = tokens[i].confidence
-			address = tokens[i].address
-			result.append(function.InstructionTextToken(token_type, text, value, size, operand, context, address, confidence))
+		result = binaryninja.function.InstructionTextToken.get_instruction_lines(tokens, count.value)
 		core.BNFreeInstructionText(tokens, count.value)
 		return result
 
@@ -671,6 +661,13 @@ class MediumLevelILFunction(object):
 			result.append(MediumLevelILBasicBlock(view, core.BNNewBasicBlockReference(blocks[i]), self))
 		core.BNFreeBasicBlockList(blocks, count.value)
 		return result
+
+	@property
+	def instructions(self):
+		"""A generator of mlil instructions of the current function"""
+		for block in self.basic_blocks:
+			for i in block:
+				yield i
 
 	@property
 	def ssa_form(self):
