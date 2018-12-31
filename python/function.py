@@ -434,7 +434,6 @@ class Function(object):
 				return None
 			self._platform = binaryninja.platform.Platform(None, handle = plat)
 			return self._platform
->>>>>>> 10cf74045e1e2495813597a499dee4fb4baf601f
 
 	@property
 	def start(self):
