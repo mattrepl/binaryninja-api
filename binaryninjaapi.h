@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017 Vector 35 LLC
+// Copyright (c) 2015-2019 Vector 35 Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -1421,6 +1421,7 @@ namespace BinaryNinja
 			DisassemblySettings* settings);
 
 		bool ParseTypeString(const std::string& text, QualifiedNameAndType& result, std::string& errors);
+		bool ParseTypeString(const std::string& text, std::map<QualifiedName, Ref<Type>>& result, std::string& errors);
 
 		std::map<QualifiedName, Ref<Type>> GetTypes();
 		Ref<Type> GetTypeByName(const QualifiedName& name);

@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2017 Vector 35 LLC
+# Copyright (c) 2015-2019 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -524,7 +524,7 @@ class Segment(object):
 		count = ctypes.c_ulonglong()
 		ranges = core.BNSegmentGetRelocationRanges(self.handle, count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append((ranges[i].start, ranges[i].end))
 		core.BNFreeRelocationRanges(ranges, count)
 		return result
@@ -535,7 +535,7 @@ class Segment(object):
 		count = ctypes.c_ulonglong()
 		ranges = core.BNSegmentGetRelocationRangesAtAddress(self.handle, addr, count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append((ranges[i].start, ranges[i].end))
 		core.BNFreeRelocationRanges(ranges, count)
 		return result
@@ -1249,7 +1249,7 @@ class BinaryView(object):
 		count = ctypes.c_ulonglong()
 		ranges = core.BNGetRelocationRanges(self.handle, count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append((ranges[i].start, ranges[i].end))
 		core.BNFreeRelocationRanges(ranges, count)
 		return result
@@ -1260,7 +1260,7 @@ class BinaryView(object):
 		count = ctypes.c_ulonglong()
 		ranges = core.BNGetRelocationRangesAtAddress(self.handle, addr, count)
 		result = []
-		for i in xrange(0, count.value):
+		for i in range(0, count.value):
 			result.append((ranges[i].start, ranges[i].end))
 		core.BNFreeRelocationRanges(ranges, count)
 		return result
@@ -1963,8 +1963,12 @@ class BinaryView(object):
 			'AAAA'
 		"""
 		if not isinstance(data, bytes):
-			raise TypeError("Must be bytes")
-		buf = databuffer.DataBuffer(data)
+			if isinstance(data, str):
+				buf = databuffer.DataBuffer(data.encode())
+			else:
+				raise TypeError("Must be bytes or str")
+		else:
+			buf = databuffer.DataBuffer(data)
 		return core.BNWriteViewBuffer(self.handle, addr, buf.handle)
 
 	def insert(self, addr, data):

@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017 Vector 35 LLC
+// Copyright (c) 2015-2019 Vector 35 Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -1838,6 +1838,30 @@ bool BinaryView::ParseTypeString(const string& text, QualifiedNameAndType& resul
 	result.type = new Type(BNNewTypeReference(nt.type));
 	errors = "";
 	BNFreeQualifiedNameAndType(&nt);
+	return true;
+}
+
+
+bool BinaryView::ParseTypeString(const string& text, std::map<QualifiedName, Ref<Type>>& result, string& errors)
+{
+	BNQualifiedNameAndType* nt;
+	char* errorStr;
+	size_t count;
+
+	if (!BNParseTypesString(m_object, text.c_str(), &nt, &count, &errorStr))
+	{
+		errors = errorStr;
+		BNFreeString(errorStr);
+		return false;
+	}
+
+	for(size_t i = 0; i < count; i++)
+	{
+		result[QualifiedName::FromAPIObject(&nt[i].name)] = new Type(BNNewTypeReference(nt[i].type));
+	}
+	BNFreeQualifiedNameAndTypeArray(nt, count);
+
+	errors = "";
 	return true;
 }
 

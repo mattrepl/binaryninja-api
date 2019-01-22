@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017 Vector 35 LLC
+// Copyright (c) 2015-2019 Vector 35 Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -228,7 +228,12 @@ bool Architecture::GetInstructionTextCallback(void* ctxt, const uint8_t* data, u
 void Architecture::FreeInstructionTextCallback(BNInstructionTextToken* tokens, size_t count)
 {
 	for (size_t i = 0; i < count; i++)
+	{
 		BNFreeString(tokens[i].text);
+		for (size_t j = 0; j < tokens[j].namesCount; j++)
+			BNFreeString(tokens[i].typeNames[j]);
+		delete[] tokens[i].typeNames;
+	}
 	delete[] tokens;
 }
 

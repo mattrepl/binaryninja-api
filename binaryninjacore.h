@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017 Vector 35 LLC
+// Copyright (c) 2015-2019 Vector 35 Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -2740,7 +2740,10 @@ extern "C"
 
 	BINARYNINJACOREAPI bool BNParseTypeString(BNBinaryView* view, const char* text,
 		BNQualifiedNameAndType* result, char** errors);
+	BINARYNINJACOREAPI bool BNParseTypesString(BNBinaryView* view, const char* text,
+		BNQualifiedNameAndType** result, size_t* count, char** errors);
 	BINARYNINJACOREAPI void BNFreeQualifiedNameAndType(BNQualifiedNameAndType* obj);
+	BINARYNINJACOREAPI void BNFreeQualifiedNameAndTypeArray(BNQualifiedNameAndType* obj, size_t count);
 
 	BINARYNINJACOREAPI BNQualifiedNameAndType* BNGetAnalysisTypeList(BNBinaryView* view, size_t* count);
 	BINARYNINJACOREAPI void BNFreeTypeList(BNQualifiedNameAndType* types, size_t count);

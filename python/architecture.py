@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2017 Vector 35 LLC
+# Copyright (c) 2015-2019 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -2308,6 +2308,11 @@ class CoreArchitecture(Architecture):
 		:return: an InstructionTextToken list for the current instruction
 		:rtype: list(InstructionTextToken)
 		"""
+		if not isinstance(data, bytes):
+			if isinstance(data, str):
+				data=data.encode()
+			else:
+				raise TypeError("Must be bytes or str")
 		count = ctypes.c_ulonglong()
 		length = ctypes.c_ulonglong()
 		length.value = len(data)
