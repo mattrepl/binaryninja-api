@@ -2715,6 +2715,7 @@ namespace BinaryNinja
 		FlowGraphNode(FlowGraph* graph);
 		FlowGraphNode(BNFlowGraphNode* node);
 
+		Ref<FlowGraph> GetGraph() const;
 		Ref<BasicBlock> GetBasicBlock() const;
 		void SetBasicBlock(BasicBlock* block);
 		int GetX() const;
@@ -3748,6 +3749,7 @@ namespace BinaryNinja
 		std::string GetName() const { return m_command.name; }
 		std::string GetDescription() const { return m_command.description; }
 		BNPluginCommandType GetType() const { return m_command.type; }
+		const BNPluginCommand* GetObject() const { return &m_command; }
 
 		bool IsValid(const PluginCommandContext& ctxt) const;
 		void Execute(const PluginCommandContext& ctxt) const;
@@ -3997,6 +3999,7 @@ namespace BinaryNinja
 
 		static void DestroyInstanceCallback(void* ctxt);
 		static BNScriptingProviderExecuteResult ExecuteScriptInputCallback(void* ctxt, const char* input);
+		static void CancelScriptInputCallback(void* ctxt);
 		static void SetCurrentBinaryViewCallback(void* ctxt, BNBinaryView* view);
 		static void SetCurrentFunctionCallback(void* ctxt, BNFunction* func);
 		static void SetCurrentBasicBlockCallback(void* ctxt, BNBasicBlock* block);
@@ -4007,6 +4010,7 @@ namespace BinaryNinja
 
 	public:
 		virtual BNScriptingProviderExecuteResult ExecuteScriptInput(const std::string& input) = 0;
+		virtual void CancelScriptInput();
 		virtual void SetCurrentBinaryView(BinaryView* view);
 		virtual void SetCurrentFunction(Function* func);
 		virtual void SetCurrentBasicBlock(BasicBlock* block);
@@ -4029,6 +4033,7 @@ namespace BinaryNinja
 		virtual ~CoreScriptingInstance() {};
 
 		virtual BNScriptingProviderExecuteResult ExecuteScriptInput(const std::string& input) override;
+		virtual void CancelScriptInput() override;
 		virtual void SetCurrentBinaryView(BinaryView* view) override;
 		virtual void SetCurrentFunction(Function* func) override;
 		virtual void SetCurrentBasicBlock(BasicBlock* block) override;

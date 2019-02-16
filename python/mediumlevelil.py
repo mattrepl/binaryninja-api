@@ -387,6 +387,11 @@ class MediumLevelILInstruction(object):
 		return lowlevelil.LowLevelILInstruction(self.function.low_level_il.ssa_form, expr)
 
 	@property
+	def llil(self):
+		"""Alias for low_level_il"""
+		return self.low_level_il
+
+	@property
 	def ssa_memory_version(self):
 		"""Version of active memory contents in SSA form for this instruction"""
 		return core.BNGetMediumLevelILSSAMemoryVersionAtILInstruction(self.function.handle, self.instr_index)
@@ -610,19 +615,27 @@ class MediumLevelILFunction(object):
 	objects can be added to the MediumLevelILFunction by calling ``append`` and passing the result of the various class
 	methods which return MediumLevelILExpr objects.
 	"""
-	def __init__(self, arch, handle = None, source_func = None):
+	def __init__(self, arch = None, handle = None, source_func = None):
 		self.arch = arch
 		self.source_function = source_func
 		if handle is not None:
 			self.handle = core.handle_of_type(handle, core.BNMediumLevelILFunction)
+			if self.source_function is None:
+				self.source_function = binaryninja.function.Function(handle = core.BNGetMediumLevelILOwnerFunction(self.handle))
+			if self.arch is None:
+				self.arch = self.source_function.arch
 		else:
 			if self.source_function is None:
+				self.handle = None
 				raise ValueError("IL functions must be created with an associated function")
+			if self.arch is None:
+				self.arch = self.source_function.arch
 			func_handle = self.source_function.handle
 			self.handle = core.BNCreateMediumLevelILFunction(arch.handle, func_handle)
 
 	def __del__(self):
-		core.BNFreeMediumLevelILFunction(self.handle)
+		if self.handle is not None:
+			core.BNFreeMediumLevelILFunction(self.handle)
 
 	def __eq__(self, value):
 		if not isinstance(value, MediumLevelILFunction):
@@ -692,6 +705,11 @@ class MediumLevelILFunction(object):
 		if not result:
 			return None
 		return lowlevelil.LowLevelILFunction(self.arch, result, self.source_function)
+
+	@property
+	def llil(self):
+		"""Alias for low_level_il"""
+		return self.low_level_il
 
 	def __setattr__(self, name, value):
 		try:
@@ -956,7 +974,7 @@ class MediumLevelILFunction(object):
 
 class MediumLevelILBasicBlock(basicblock.BasicBlock):
 	def __init__(self, view, handle, owner):
-		super(MediumLevelILBasicBlock, self).__init__(view, handle)
+		super(MediumLevelILBasicBlock, self).__init__(handle, view)
 		self.il_function = owner
 
 	def __iter__(self):
@@ -972,7 +990,7 @@ class MediumLevelILBasicBlock(basicblock.BasicBlock):
 		else:
 			return self.il_function[self.end + idx]
 
-	def _create_instance(self, view, handle):
+	def _create_instance(self, handle, view):
 		"""Internal method by super to instantiate child instances"""
 		return MediumLevelILBasicBlock(view, handle, self.il_function)
 

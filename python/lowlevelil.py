@@ -531,7 +531,10 @@ class LowLevelILInstruction(object):
 	@property
 	def il_basic_block(self):
 		"""IL basic block object containing this expression (read-only) (only available on finalized functions)"""
-		return LowLevelILBasicBlock(self.function.source_function.view, core.BNGetLowLevelILBasicBlockForInstruction(self.function.handle, self.instr_index), self.function)
+		view = None
+		if self.function.source_function is not None:
+			view = self.function.source_function.view
+		return LowLevelILBasicBlock(view, core.BNGetLowLevelILBasicBlockForInstruction(self.function.handle, self.instr_index), self.function)
 
 	@property
 	def ssa_form(self):
@@ -554,12 +557,20 @@ class LowLevelILInstruction(object):
 		return binaryninja.mediumlevelil.MediumLevelILInstruction(self.function.medium_level_il, expr)
 
 	@property
+	def mlil(self):
+		return self.medium_level_il
+
+	@property
 	def mapped_medium_level_il(self):
 		"""Gets the mapped medium level IL expression corresponding to this expression"""
 		expr = self.function.get_mapped_medium_level_il_expr_index(self.expr_index)
 		if expr is None:
 			return None
 		return binaryninja.mediumlevelil.MediumLevelILInstruction(self.function.mapped_medium_level_il, expr)
+
+	@property
+	def mmlil(self):
+		return self.mapped_medium_level_il
 
 	@property
 	def value(self):
@@ -719,19 +730,31 @@ class LowLevelILFunction(object):
 		LLFC_NO                 !overflow  No overflow
 		======================= ========== ===============================
 	"""
-	def __init__(self, arch, handle = None, source_func = None):
+	def __init__(self, arch = None, handle = None, source_func = None):
 		self.arch = arch
 		self.source_function = source_func
 		if handle is not None:
 			self.handle = core.handle_of_type(handle, core.BNLowLevelILFunction)
-		else:
 			if self.source_function is None:
-				raise ValueError("IL functions must be created with an associated function")
-			func_handle = self.source_function.handle
+				source_handle = core.BNGetLowLevelILOwnerFunction(self.handle)
+				if source_handle:
+					self.source_function = binaryninja.function.Function(handle = source_handle)
+				else:
+					self.source_function = None
+			if self.arch is None:
+				self.arch = self.source_function.arch
+		else:
+			if self.arch is None:
+				self.arch = self.source_function.arch
+			if self.source_function is None:
+				func_handle = None
+			else:
+				func_handle = self.source_function.handle
 			self.handle = core.BNCreateLowLevelILFunction(arch.handle, func_handle)
 
 	def __del__(self):
-		core.BNFreeLowLevelILFunction(self.handle)
+		if self.handle is not None:
+			core.BNFreeLowLevelILFunction(self.handle)
 
 	def __eq__(self, value):
 		if not isinstance(value, LowLevelILFunction):
@@ -813,6 +836,10 @@ class LowLevelILFunction(object):
 		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, result, self.source_function)
 
 	@property
+	def mlil(self):
+		return self.medium_level_il
+
+	@property
 	def mapped_medium_level_il(self):
 		"""Medium level IL with mappings between low level IL and medium level IL. Unused stores are not removed.
 		Typically, this should only be used to answer queries on assembly or low level IL where the query is
@@ -821,6 +848,10 @@ class LowLevelILFunction(object):
 		if not result:
 			return None
 		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, result, self.source_function)
+
+	@property
+	def mmlil(self):
+		return self.mapped_medium_level_il
 
 	def __setattr__(self, name, value):
 		try:
@@ -2373,7 +2404,7 @@ class LowLevelILFunction(object):
 
 class LowLevelILBasicBlock(basicblock.BasicBlock):
 	def __init__(self, view, handle, owner):
-		super(LowLevelILBasicBlock, self).__init__(view, handle)
+		super(LowLevelILBasicBlock, self).__init__(handle, view)
 		self.il_function = owner
 
 	def __iter__(self):
@@ -2389,7 +2420,7 @@ class LowLevelILBasicBlock(basicblock.BasicBlock):
 		else:
 			return self.il_function[self.end + idx]
 
-	def _create_instance(self, view, handle):
+	def _create_instance(self, handle, view):
 		"""Internal method by super to instantiate child instances"""
 		return LowLevelILBasicBlock(view, handle, self.il_function)
 
