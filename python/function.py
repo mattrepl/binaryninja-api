@@ -1905,11 +1905,12 @@ class DisassemblyTextRenderer(object):
 	def basic_block(self, block):
 		if block is not None:
 			core.BNSetDisassemblyTextRendererBasicBlock(self.handle, block.handle)
-		core.BNSetDisassemblyTextRendererBasicBlock(self.handle, None)
+		else:
+			core.BNSetDisassemblyTextRendererBasicBlock(self.handle, None)
 
 	@property
 	def arch(self):
-		return binaryninja.architecture.Architecture(handle = core.BNSetDisassemblyTextRendererArchitecture(self.handle))
+		return binaryninja.architecture.CoreArchitecture(handle = core.BNGetDisassemblyTextRendererArchitecture(self.handle))
 
 	@arch.setter
 	def arch(self, arch):
@@ -1931,7 +1932,7 @@ class DisassemblyTextRenderer(object):
 
 	@property
 	def has_data_flow(self):
-		return core.BNDisassmblyTextRendererHasDataFlow(self.handle)
+		return core.BNDisassemblyTextRendererHasDataFlow(self.handle)
 
 	def get_instruction_annotations(self, addr):
 		count = ctypes.c_ulonglong()
