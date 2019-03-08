@@ -203,10 +203,29 @@ class AnalysisProgress(object):
 
 
 class DataVariable(object):
-	def __init__(self, addr, var_type, auto_discovered):
+	def __init__(self, addr, var_type, auto_discovered, view=None):
 		self.address = addr
 		self.type = var_type
 		self.auto_discovered = auto_discovered
+		self.view = view
+
+	@property
+	def data_refs_from(self):
+		"""data cross references from this data variable (read-only)"""
+		return self.view.get_data_refs_from(self.address, len(self.type))
+
+	@property
+	def data_refs(self):
+		"""data cross references to this data variable (read-only)"""
+		return self.view.get_data_refs(self.address, len(self.type))
+
+	@property
+	def code_refs(self):
+		"""code references to this data variable (read-only)"""
+		return self.view.get_code_refs(self.address, len(self.type))
+
+	def __len__(self):
+		return len(self.type)
 
 	def __repr__(self):
 		return "<var 0x%x: %s>" % (self.address, str(self.type))
@@ -286,7 +305,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self.view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self.notify.data_var_added(self.view, DataVariable(address, var_type, auto_discovered))
+			self.notify.data_var_added(self.view, DataVariable(address, var_type, auto_discovered, view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -295,7 +314,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self.view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self.notify.data_var_removed(self.view, DataVariable(address, var_type, auto_discovered))
+			self.notify.data_var_removed(self.view, DataVariable(address, var_type, auto_discovered, view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -304,7 +323,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self.view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self.notify.data_var_updated(self.view, DataVariable(address, var_type, auto_discovered))
+			self.notify.data_var_updated(self.view, DataVariable(address, var_type, auto_discovered, view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -1161,7 +1180,7 @@ class BinaryView(object):
 			addr = var_list[i].address
 			var_type = types.Type(core.BNNewTypeReference(var_list[i].type), platform = self.platform, confidence = var_list[i].typeConfidence)
 			auto_discovered = var_list[i].autoDiscovered
-			result[addr] = DataVariable(addr, var_type, auto_discovered)
+			result[addr] = DataVariable(addr, var_type, auto_discovered, self)
 		core.BNFreeDataVariables(var_list, count.value)
 		return result
 
@@ -2353,7 +2372,7 @@ class BinaryView(object):
 		var = core.BNDataVariable()
 		if not core.BNGetDataVariableAtAddress(self.handle, addr, var):
 			return None
-		return DataVariable(var.address, types.Type(var.type, platform = self.platform, confidence = var.typeConfidence), var.autoDiscovered)
+		return DataVariable(var.address, types.Type(var.type, platform = self.platform, confidence = var.typeConfidence), var.autoDiscovered, self)
 
 	def get_functions_containing(self, addr):
 		"""
@@ -2492,11 +2511,52 @@ class BinaryView(object):
 		return result
 
 	def get_data_refs(self, addr, length=None):
+		"""
+		``get_data_refs`` returns a list of virtual addresses of data which references ``addr``. Optionally specifying
+		a length. When ``length`` is set ``get_data_refs`` returns the data which references in the range ``addr``-``addr``+``length``.
+
+		:param int addr: virtual address to query for references
+		:param int length: optional length of query
+		:return: list of integers
+		:rtype: list(integer)
+		:Example:
+
+			>>> bv.get_data_refs(here)
+			[4203812]
+			>>>
+		"""
 		count = ctypes.c_ulonglong(0)
 		if length is None:
 			refs = core.BNGetDataReferences(self.handle, addr, count)
 		else:
 			refs = core.BNGetDataReferencesInRange(self.handle, addr, length, count)
+
+		result = []
+		for i in range(0, count.value):
+			result.append(refs[i])
+		core.BNFreeDataReferences(refs, count.value)
+		return result
+
+	def get_data_refs_from(self, addr, length=None):
+		"""
+		``get_data_refs_from`` returns a list of virtual addresses referenced by the address ``addr``. Optionally specifying
+		a length. When ``length`` is set ``get_data_refs_from`` returns the data referenced in the range ``addr``-``addr``+``length``.
+
+		:param int addr: virtual address to query for references
+		:param int length: optional length of query
+		:return: list of integers
+		:rtype: list(integer)
+		:Example:
+
+			>>> bv.get_data_refs_from(here)
+			[4200327]
+			>>>
+		"""
+		count = ctypes.c_ulonglong(0)
+		if length is None:
+			refs = core.BNGetDataReferencesFrom(self.handle, addr, count)
+		else:
+			refs = core.BNGetDataReferencesFromInRange(self.handle, addr, length, count)
 
 		result = []
 		for i in range(0, count.value):
