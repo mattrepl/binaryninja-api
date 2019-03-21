@@ -208,6 +208,7 @@ extern "C"
 		FunctionReturn = 4,
 		SystemCall = 5,
 		IndirectBranch = 6,
+		ExceptionBranch = 7,
 		UnresolvedBranch = 127
 	};
 
@@ -700,6 +701,16 @@ extern "C"
 		UnsignedHexadecimalDisplayType,
 		CharacterConstantDisplayType,
 		PointerDisplayType
+	};
+
+	enum BNFlowGraphOption
+	{
+		FlowGraphUsesBlockHighlights,
+		FlowGraphUsesInstructionHighlights,
+		FlowGraphIncludesUserComments,
+		FlowGraphAllowsPatching,
+		FlowGraphAllowsInlineInstructionEditing,
+		FlowGraphShowsSecondaryRegisterHighlighting
 	};
 
 	struct BNLowLevelILInstruction
@@ -1638,6 +1649,13 @@ extern "C"
 		size_t count, total;
 	};
 
+	enum BNAnalysisMode
+	{
+		FullAnalysisMode,
+		BasicAnalysisMode,
+		ControlFlowAnalysisMode
+	};
+
 	struct BNAnalysisParameters
 	{
 		uint64_t maxAnalysisTime;
@@ -1646,6 +1664,8 @@ extern "C"
 		size_t maxFunctionUpdateCount;
 		size_t maxFunctionSubmitCount;
 		bool suppressNewAutoFunctionAnalysis;
+		BNAnalysisMode mode;
+		bool alwaysAnalyzeIndirectBranches;
 	};
 
 	struct BNDownloadInstanceOutputCallbacks
@@ -1948,7 +1968,8 @@ extern "C"
 		ExceedFunctionSizeSkipReason,
 		ExceedFunctionAnalysisTimeSkipReason,
 		ExceedFunctionUpdateCountSkipReason,
-		NewAutoFunctionAnalysisSuppressedReason
+		NewAutoFunctionAnalysisSuppressedReason,
+		BasicAnalysisSkipReason
 	};
 
 	enum BNSettingsScope
@@ -2860,6 +2881,8 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeFlowGraph(BNFlowGraph* graph);
 	BINARYNINJACOREAPI BNFunction* BNGetFunctionForFlowGraph(BNFlowGraph* graph);
 	BINARYNINJACOREAPI void BNSetFunctionForFlowGraph(BNFlowGraph* graph, BNFunction* func);
+	BINARYNINJACOREAPI BNBinaryView* BNGetViewForFlowGraph(BNFlowGraph* graph);
+	BINARYNINJACOREAPI void BNSetViewForFlowGraph(BNFlowGraph* graph, BNBinaryView* view);
 
 	BINARYNINJACOREAPI int BNGetHorizontalFlowGraphNodeMargin(BNFlowGraph* graph);
 	BINARYNINJACOREAPI int BNGetVerticalFlowGraphNodeMargin(BNFlowGraph* graph);
@@ -2916,9 +2939,12 @@ extern "C"
 
 	BINARYNINJACOREAPI BNFlowGraph* BNUpdateFlowGraph(BNFlowGraph* graph);
 
+	BINARYNINJACOREAPI void BNSetFlowGraphOption(BNFlowGraph* graph, BNFlowGraphOption option, bool value);
+	BINARYNINJACOREAPI bool BNIsFlowGraphOptionSet(BNFlowGraph* graph, BNFlowGraphOption option);
+
 	// Symbols
 	BINARYNINJACOREAPI BNSymbol* BNCreateSymbol(BNSymbolType type, const char* shortName, const char* fullName,
-		const char* rawName, uint64_t addr, BNSymbolBinding binding, const BNNameSpace* nameSpace);
+		const char* rawName, uint64_t addr, BNSymbolBinding binding, const BNNameSpace* nameSpace, uint64_t ordinal);
 	BINARYNINJACOREAPI BNSymbol* BNNewSymbolReference(BNSymbol* sym);
 	BINARYNINJACOREAPI void BNFreeSymbol(BNSymbol* sym);
 	BINARYNINJACOREAPI BNSymbolType BNGetSymbolType(BNSymbol* sym);
@@ -2928,6 +2954,7 @@ extern "C"
 	BINARYNINJACOREAPI char* BNGetSymbolFullName(BNSymbol* sym);
 	BINARYNINJACOREAPI char* BNGetSymbolRawName(BNSymbol* sym);
 	BINARYNINJACOREAPI uint64_t BNGetSymbolAddress(BNSymbol* sym);
+	BINARYNINJACOREAPI uint64_t BNGetSymbolOrdinal(BNSymbol* sym);
 	BINARYNINJACOREAPI bool BNIsSymbolAutoDefined(BNSymbol* sym);
 
 	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByAddress(BNBinaryView* view, uint64_t addr, const BNNameSpace* nameSpace);
@@ -3576,6 +3603,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNWaitForMainThreadAction(BNMainThreadAction* action);
 	BINARYNINJACOREAPI BNMainThreadAction* BNExecuteOnMainThread(void* ctxt, void (*func)(void* ctxt));
 	BINARYNINJACOREAPI void BNExecuteOnMainThreadAndWait(void* ctxt, void (*func)(void* ctxt));
+	BINARYNINJACOREAPI bool BNIsMainThread(void);
 
 	// Worker thread queue management
 	BINARYNINJACOREAPI void BNWorkerEnqueue(void* ctxt, void (*action)(void* ctxt));

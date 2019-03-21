@@ -625,6 +625,7 @@ namespace BinaryNinja
 	void RegisterMainThread(MainThreadActionHandler* handler);
 	Ref<MainThreadAction> ExecuteOnMainThread(const std::function<void()>& action);
 	void ExecuteOnMainThreadAndWait(const std::function<void()>& action);
+	bool IsMainThread();
 
 	void WorkerEnqueue(const std::function<void()>& action);
 	void WorkerEnqueue(RefCountObject* owner, const std::function<void()>& action);
@@ -1005,9 +1006,10 @@ namespace BinaryNinja
 	{
 	public:
 		Symbol(BNSymbolType type, const std::string& shortName, const std::string& fullName, const std::string& rawName,
-			uint64_t addr, BNSymbolBinding binding=NoBinding, const NameSpace& nameSpace=NameSpace(DEFAULT_INTERNAL_NAMESPACE));
+			uint64_t addr, BNSymbolBinding binding=NoBinding, const NameSpace& nameSpace=NameSpace(DEFAULT_INTERNAL_NAMESPACE),
+			uint64_t ordinal=0);
 		Symbol(BNSymbolType type, const std::string& name, uint64_t addr, BNSymbolBinding binding=NoBinding,
-			const NameSpace& nameSpace=NameSpace(DEFAULT_INTERNAL_NAMESPACE));
+			const NameSpace& nameSpace=NameSpace(DEFAULT_INTERNAL_NAMESPACE), uint64_t ordinal=0);
 		Symbol(BNSymbol* sym);
 
 		BNSymbolType GetType() const;
@@ -1016,6 +1018,7 @@ namespace BinaryNinja
 		std::string GetFullName() const;
 		std::string GetRawName() const;
 		uint64_t GetAddress() const;
+		uint64_t GetOrdinal() const;
 		bool IsAutoDefined() const;
 		NameSpace GetNameSpace() const;
 
@@ -2776,7 +2779,9 @@ namespace BinaryNinja
 		FlowGraph();
 
 		Ref<Function> GetFunction() const;
+		Ref<BinaryView> GetView() const;
 		void SetFunction(Function* func);
+		void SetView(BinaryView* view);
 
 		int GetHorizontalNodeMargin() const;
 		int GetVerticalNodeMargin() const;
@@ -2805,6 +2810,9 @@ namespace BinaryNinja
 		void Show(const std::string& title);
 
 		virtual Ref<FlowGraph> Update();
+
+		void SetOption(BNFlowGraphOption option, bool value = true);
+		bool IsOptionSet(BNFlowGraphOption option);
 	};
 
 	class CoreFlowGraph: public FlowGraph
