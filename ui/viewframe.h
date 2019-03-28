@@ -36,6 +36,7 @@ class BINARYNINJAUIAPI View
 protected:
 	Menu m_contextMenu;
 	UIActionHandler m_actionHandler;
+	bool m_binaryDataNavigable = false;
 
 	bool writeDataToClipboard(const BinaryNinja::DataBuffer& data, bool binary, TransformRef xform);
 	BinaryNinja::DataBuffer readDataFromClipboard(TransformRef xform);
@@ -73,6 +74,9 @@ public:
 	virtual bool navigate(uint64_t offset) = 0;
 	virtual bool navigateToFunction(FunctionRef func, uint64_t offset);
 	virtual bool goToReference(FunctionRef func, uint64_t source, uint64_t target);
+
+	bool isBinaryDataNavigable() { return m_binaryDataNavigable; }
+	void setBinaryDataNavigable(bool navigable) { m_binaryDataNavigable = navigable; }
 
 	virtual bool closeRequest() { return true; }
 	virtual void closing() {}
@@ -210,11 +214,11 @@ public:
 
 	QWidget* getExtendedView(const QString& name, bool create = false);
 
-	bool navigate(const QString& type, uint64_t offset, bool updateInfo = true);
-	bool navigate(const QString& type, const std::function<bool(View*)>& handler, bool updateInfo = true);
-	bool navigate(BinaryViewRef data, uint64_t offset, bool updateInfo = true);
-	bool navigateToFunction(FunctionRef func, uint64_t offset, bool updateInfo = true);
-	bool goToReference(BinaryViewRef data, FunctionRef func, uint64_t source, uint64_t target);
+	bool navigate(const QString& type, uint64_t offset, bool updateInfo = true, bool addHistoryEntry = true);
+	bool navigate(const QString& type, const std::function<bool(View*)>& handler, bool updateInfo = true, bool addHistoryEntry = true);
+	bool navigate(BinaryViewRef data, uint64_t offset, bool updateInfo = true, bool addHistoryEntry = true);
+	bool navigateToFunction(FunctionRef func, uint64_t offset, bool updateInfo = true, bool addHistoryEntry = true);
+	bool goToReference(BinaryViewRef data, FunctionRef func, uint64_t source, uint64_t target, bool addHistoryEntry = true);
 	QString getTypeForView(QWidget* view);
 	QString getDataTypeForView(const QString& type);
 	QString getDataTypeForView(QWidget* view);
@@ -237,6 +241,8 @@ public:
 	void updateFeatureMapLocation(View* view);
 	void updateCrossReferences();
 	void showCrossReferences();
+	void nextCrossReference();
+	void prevCrossReference();
 
 	virtual UIActionContext actionContext();
 	void bindActions();

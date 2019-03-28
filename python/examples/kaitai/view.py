@@ -28,15 +28,80 @@ class MyQTreeWidget(QTreeWidget):
 	def __init__(self):
 		QTreeWidget.__init__(self)
 
+		self.oldWidth = 0
+		self.oldHeight = 0
+
+		self.queueInitialPresentation = False
+
 	def resizeEvent(self, event):
 		QTreeWidget.resizeEvent(self, event)
+
+		if self.queueInitialPresentation:
+			self.initialPresentation()
+
 		self.scrollTo(self.currentIndex())
+
+		newWidth = self.width()
+		newHeight = self.height()
+
+		#log.log_debug('QTreeWidget resizeEvent(), now I\'m %dx%d' % (newWidth, newHeight))
+
+		if newWidth == self.oldWidth and newHeight == self.oldHeight:
+			return
+
+		self.oldWidth = newWidth
+		self.oldHeight = newHeight
+
+		self.setColumnWidthsNicely()
+
+	def initialPresentation(self):
+		self.expandNicely()
+
+		if self.topLevelItemCount():
+			self.topLevelItem(0).setSelected(True)
+
+		self.queueInitialPresentation = False
+
+	def setColumnWidthsNicely(self):
+		width = self.width()
+		self.setColumnWidth(0, .6*width)
+		self.setColumnWidth(1, .2*width)
+		self.setColumnWidth(2, .1*width)
+		self.setColumnWidth(3, .1*width)
+
+	def expandNicely(self):
+		visibleRows = self.topLevelItemCount()
+		if not visibleRows:
+			return
+
+		height = self.height()
+		rowHeight = self.visualItemRect(self.topLevelItem(0)).height()
+		rowCapacity = height / rowHeight
+
+		queue = []
+		for i in range(visibleRows):
+			queue.append(self.topLevelItem(i))
+
+		while visibleRows < rowCapacity:
+			#log.log_debug('visibleRows=%d, rowCapacity=%d len(queue)=%d' % (visibleRows, rowCapacity, len(queue)))
+			if not queue:
+				break
+
+			item = queue[0]
+			queue = queue[1:]
+
+			if not item.isExpanded():
+				item.setExpanded(True)
+				for i in range(item.childCount()):
+					queue.append(item.child(i))
+					visibleRows += 1
 
 class KaitaiView(QScrollArea, View):
 	def __init__(self, parent, binaryView):
 		QScrollArea.__init__(self, parent)
 
 		View.__init__(self)
+		View.setBinaryDataNavigable(self, True)
 		self.setupView(self)
 
 		# BinaryViewType
@@ -57,7 +122,7 @@ class KaitaiView(QScrollArea, View):
 		self.treeWidget.itemSelectionChanged.connect(self.onTreeSelect)
 
 		self.structPath = QLineEdit("root")
-		self.structPath.setDisabled(True)
+		self.structPath.setReadOnly(True)
 
 		self.hexWidget = HexEditor(binaryView, ViewFrame.viewFrameForWidget(self), 0)
 
@@ -72,21 +137,29 @@ class KaitaiView(QScrollArea, View):
 		self.kaitaiParse()
 
 	# parse the file using Kaitai, construct the TreeWidget
-	def kaitaiParse(self, formatName=None):
-		#print('kaitaiParse() with len(bv)=%d and bv.file.filename=%s' % (len(self.binaryView), self.binaryView.file.filename))
+	def kaitaiParse(self, ksModuleName=None):
+		log.log_debug('kaitaiParse() with len(bv)=%d and bv.file.filename=%s' % (len(self.binaryView), self.binaryView.file.filename))
 
 		if len(self.binaryView) == 0:
 			return
 
 		kaitaiIO = kshelpers.KaitaiBinaryViewIO(self.binaryView)
-		if not kaitaiIO:
-			print('ERROR: initializing kaitai binary view')
-		parsed = kshelpers.parseIo(kaitaiIO, formatName)
+		parsed = kshelpers.parseIo(kaitaiIO, ksModuleName)
 		if not parsed:
-			print('ERROR: parsing the binary view')
 			return
 
-		tree = kshelpers.buildQtree(parsed)
+		# it SEEMS as if parsing is finished at this moment, but some parsing
+		# is postponed until attributes are accessed, so we must try/catch here
+		tree = None
+		if True:
+			try:
+				tree = kshelpers.buildQtree(parsed)
+			except Exception as e:
+				log.log_error('kaitai module %s threw exception, check file type' % ksModuleName)
+				tree = None
+		else:
+			tree = kshelpers.buildQtree(parsed)
+
 		if not tree:
 			return
 
@@ -107,7 +180,6 @@ class KaitaiView(QScrollArea, View):
 			# add root's children as top level items
 			self.treeWidget.insertTopLevelItems(0, tree.takeChildren())
 
-
 		# enable sorting
 		self.treeWidget.setSortingEnabled(True)
 		self.treeWidget.sortByColumn(2, Qt.AscendingOrder)
@@ -115,18 +187,10 @@ class KaitaiView(QScrollArea, View):
 		# TODO: select first item, maybe expand a few things
 		self.rootSelectionStart = 0
 		self.rootSelectionEnd = 1
-		self.hexWidget.setSelectionRange(0,1)
+
 		self.treeWidget.setUniformRowHeights(True)
+		self.treeWidget.queueInitialPresentation = True
 
-	# Qt callbacks
-	def resizeEvent(self, event):
-		width = self.treeWidget.width()
-		self.treeWidget.setColumnWidth(0, .6*width)
-		self.treeWidget.setColumnWidth(1, .2*width)
-		self.treeWidget.setColumnWidth(2, .1*width)
-		self.treeWidget.setColumnWidth(3, .1*width)
-
-		QScrollArea.resizeEvent(self, event)
 
 	# binja callbacks
 	def getData(self):
@@ -134,23 +198,23 @@ class KaitaiView(QScrollArea, View):
 
 	def getStart(self):
 		result = self.binaryView.start
-		#print('getStart() returning '+str(result))
+		#log.log_debug('getStart() returning '+str(result))
 		return result
 
 	def getEnd(self):
 		result = self.binaryView.end
-		#print('getEnd() returning '+str(result))
+		#log.log_debug('getEnd() returning '+str(result))
 		return result
 
 	def getLength(self):
 		result = len(self.binaryView)
-		#print('getLength() returning '+str(result))
+		#log.log_debug('getLength() returning '+str(result))
 		return result
 
 	def getCurrentOffset(self):
 		result = self.rootSelectionStart + int((self.rootSelectionEnd - self.rootSelectionStart)/2)
 		#result = self.rootSelectionStart
-		#print('getCurrentOffset() returning '+str(result))
+		#log.log_debug('getCurrentOffset() returning '+str(result))
 		return result
 
 	def getSelectionOffsets(self):
@@ -159,11 +223,11 @@ class KaitaiView(QScrollArea, View):
 			result = self.hexWidget.getSelectionOffsets()
 		else:
 			result = (self.rootSelectionStart, self.rootSelectionStart)
-		#print('getSelectionOffsets() returning '+str(result))
+		#log.log_debug('getSelectionOffsets() returning '+str(result))
 		return result
 
 	def setCurrentOffset(self, offset):
-		#print('setCurrentOffset(0x%X)' % offset)
+		#log.log_debug('setCurrentOffset(0x%X)' % offset)
 		self.rootSelectionStart = offset
 		UIContext.updateStatus(True)
 
@@ -171,23 +235,31 @@ class KaitaiView(QScrollArea, View):
 		return binaryninjaui.getMonospaceFont(self)
 
 	def navigate(self, addr):
-		#print('navigate()')
-		return False
+		self.rootSelectionStart = addr
+		self.rootSelectionEnd = addr+1
+		self.hexWidget.setSelectionRange(addr, addr+1)
+		return True
 
 	def navigateToFileOffset(self, offset):
-		#print('navigateToFileOffset()')
+		#log.log_debug('navigateToFileOffset()')
 		return False
 
 	def onTreeSelect(self, wtf=None):
 		# get KaitaiTreeWidgetItem
-		item = self.treeWidget.selectedItems()[0]
+		items = self.treeWidget.selectedItems()
+		if not items or len(items)<1:
+			return
+		item = items[0]
 
 		# build path, inform user
 		structPath = item.label
 		itemTmp = item
 		while itemTmp.parent():
 			itemTmp = itemTmp.parent()
-			structPath = itemTmp.label + '.' + structPath
+			label = itemTmp.label
+			if label.startswith('_m_'):
+				label = label[3:]
+			structPath = label + '.' + structPath
 		self.structPath.setText('root.' + structPath)
 
 		#
@@ -242,7 +314,7 @@ class KaitaiView(QScrollArea, View):
 			self.ioCurrent = _io
 
 		# now position selection in whatever HexEditor is current
-		#print('selecting to [0x%X, 0x%X)' % (start, end))
+		#log.log_debug('selecting to [0x%X, 0x%X)' % (start, end))
 		self.hexWidget.setSelectionRange(start, end)
 
 		# set hex group title to reflect current selection
@@ -258,12 +330,12 @@ class KaitaiViewType(ViewType):
 	# binaryView:		BinaryView
 	def getPriority(self, binaryView, filename):
 		#return 100
-		#print('len(bv)=0x%X executable=%d bytes=%s' % (len(binaryView), binaryView.executable, repr(binaryView.read(0,4))))
+		#log.log_debug('len(bv)=0x%X executable=%d bytes=%s' % (len(binaryView), binaryView.executable, repr(binaryView.read(0,4))))
 
 		# executable means the view is mapped like an OS loader would load an executable (eg: view=ELF)
 		# !executable means executable image is not mapped (eg: view=Raw) (or something like .png is loaded)
 		if binaryView.executable:
-			return 1
+			return 0
 
 		if binaryView.start != 0:
 			return 1
@@ -277,7 +349,7 @@ class KaitaiViewType(ViewType):
 		if not ksModuleName:
 			return 1
 
-		# for executables, yield triage (25)
+		# for executables, yield to triage (25)
 		if ksModuleName in ['elf', 'microsoft_pe', 'mach_o']:
 			return 24
 

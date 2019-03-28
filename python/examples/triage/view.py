@@ -26,7 +26,7 @@ class TriageView(QScrollArea, View):
 		container = QWidget(self)
 		layout = QVBoxLayout()
 
-		entropyGroup = QGroupBox("Entropy")
+		entropyGroup = QGroupBox("Entropy", container)
 		entropyLayout = QVBoxLayout()
 		entropyLayout.addWidget(entropy.EntropyWidget(entropyGroup, self, self.data))
 		entropyGroup.setLayout(entropyLayout)
@@ -42,7 +42,7 @@ class TriageView(QScrollArea, View):
 			log.log_error(traceback.format_exc())
 
 		if hdr is not None:
-			headerGroup = QGroupBox("Headers")
+			headerGroup = QGroupBox("Headers", container)
 			headerLayout = QVBoxLayout()
 			headerWidget = headers.HeaderWidget(headerGroup, hdr)
 			headerLayout.addWidget(headerWidget)
@@ -52,13 +52,13 @@ class TriageView(QScrollArea, View):
 		if self.data.executable:
 			importExportSplitter = QSplitter(Qt.Horizontal)
 
-			importGroup = QGroupBox("Imports")
+			importGroup = QGroupBox("Imports", container)
 			importLayout = QVBoxLayout()
 			importLayout.addWidget(imports.ImportsWidget(importGroup, self, self.data))
 			importGroup.setLayout(importLayout)
 			importExportSplitter.addWidget(importGroup)
 
-			exportGroup = QGroupBox("Exports")
+			exportGroup = QGroupBox("Exports", container)
 			exportLayout = QVBoxLayout()
 			exportLayout.addWidget(exports.ExportsWidget(exportGroup, self, self.data))
 			exportGroup.setLayout(exportLayout)
@@ -67,7 +67,7 @@ class TriageView(QScrollArea, View):
 			layout.addWidget(importExportSplitter)
 
 			if self.data.view_type != "PE":
-				segmentsGroup = QGroupBox("Segments")
+				segmentsGroup = QGroupBox("Segments", container)
 				segmentsLayout = QVBoxLayout()
 				segmentsWidget = sections.SegmentsWidget(segmentsGroup, self.data)
 				segmentsLayout.addWidget(segmentsWidget)
@@ -76,7 +76,7 @@ class TriageView(QScrollArea, View):
 				if len(segmentsWidget.segments) == 0:
 					segmentsGroup.hide()
 
-			sectionsGroup = QGroupBox("Sections")
+			sectionsGroup = QGroupBox("Sections", container)
 			sectionsLayout = QVBoxLayout()
 			sectionsWidget = sections.SectionsWidget(sectionsGroup, self.data)
 			sectionsLayout.addWidget(sectionsWidget)
@@ -94,6 +94,7 @@ class TriageView(QScrollArea, View):
 			layout.addStretch(1)
 		else:
 			self.byteView = byte.ByteView(self, self.data)
+			View.setBinaryDataNavigable(self, True)
 			layout.addWidget(self.byteView, 1)
 
 		container.setLayout(layout)
@@ -124,9 +125,10 @@ class TriageView(QScrollArea, View):
 		return binaryninjaui.getMonospaceFont(self)
 
 	def navigate(self, addr):
-		if self.byteView is not None:
+		if self.byteView:
+			return self.byteView.navigate(addr)
+		else:
 			return self.navigate(addr)
-		return False
 
 	def startFullAnalysis(self):
 		Settings().set_string("analysis.mode", "full", self.data)
@@ -170,8 +172,8 @@ class TriageViewType(ViewType):
 
 	def getPriority(self, data, filename):
 		is_full = Settings().get_string("analysis.mode", data) == "full"
-		always_prefer = Settings().get_bool("triage.always_prefer", data)
-		prefer_for_raw = Settings().get_bool("triage.prefer_for_raw", data)
+		always_prefer = Settings().get_bool("triage.preferSummaryView", data)
+		prefer_for_raw = Settings().get_bool("triage.preferSummaryViewForRaw", data)
 		if data.executable and (always_prefer or not is_full):
 			return 100
 		if len(data) > 0:
@@ -185,21 +187,21 @@ class TriageViewType(ViewType):
 
 
 Settings().register_group("triage", "Triage")
-Settings().register_setting("triage.always_prefer", """
+Settings().register_setting("triage.preferSummaryView", """
 	{
-		"title" : "Always Prefer Triage Summary View",
+		"title" : "Prefer Triage Summary View",
 		"type" : "boolean",
 		"default" : false,
-		"description" : "Always prefer opening binaries in Triage Summary view, even when performing full analysis."
+		"description" : "Always prefer Triage Summary View when opening a binary, even when performing full analysis."
 	}
 	""")
 
-Settings().register_setting("triage.prefer_for_raw", """
+Settings().register_setting("triage.preferSummaryViewForRaw", """
 	{
 		"title" : "Prefer Triage Summary View for Raw Files",
 		"type" : "boolean",
 		"default" : true,
-		"description" : "Prefer opening raw files in Triage Summary view."
+		"description" : "Prefer Triage Summary View when opening a binary that is Raw file type."
 	}
 	""")
 
