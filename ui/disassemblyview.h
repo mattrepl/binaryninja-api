@@ -47,6 +47,7 @@ public:
 	virtual StatusBarWidget* getStatusBarWidget() override;
 
 	void setGraphType(BNFunctionGraphType type);
+	BNFunctionGraphType getGraphType() { return m_graphType; };
 	void setOption(BNDisassemblyOption option, bool state = true);
 	void toggleOption(BNDisassemblyOption option);
 
@@ -58,20 +59,17 @@ public:
 	static void registerActions();
 
 private:
-	class DisassemblyViewOptionsWidget: public QLabel
+	class DisassemblyViewOptionsWidget: public MenuHelper
 	{
 	public:
 		DisassemblyViewOptionsWidget(DisassemblyView* parent);
 
 	protected:
 		virtual void mousePressEvent(QMouseEvent* event);
-		virtual void enterEvent(QEvent* event);
-		virtual void leaveEvent(QEvent* event);
+		virtual void showMenu();
 
 	private:
 		DisassemblyView* m_view;
-		Menu m_menu;
-		ContextMenuManager m_contextMenuManager;
 	};
 
 	class DisassemblyViewStatusBarWidget: public StatusBarWidget
@@ -97,6 +95,20 @@ private Q_SLOTS:
 };
 
 
+class GraphTypeLabel: public MenuHelper
+{
+	Q_OBJECT
+
+	DisassemblyContainer* m_container;
+
+public:
+	GraphTypeLabel(QWidget* parent, DisassemblyContainer* container);
+
+protected:
+	virtual void showMenu();
+};
+
+
 class BINARYNINJAUIAPI DisassemblyFunctionHeader: public QWidget
 {
 	Q_OBJECT
@@ -108,6 +120,7 @@ class BINARYNINJAUIAPI DisassemblyFunctionHeader: public QWidget
 
 	QProgressIndicator* m_updateIndicator;
 	QTimer* m_updateTimer;
+	GraphTypeLabel* m_graphType;
 
 	RenderContext m_render;
 	std::vector<BinaryNinja::DisassemblyTextLine> m_lines;
@@ -131,6 +144,7 @@ public:
 
 	void updateFonts();
 	void setCurrentFunction(FunctionRef func);
+	void setGraphType(BNFunctionGraphType graphType);
 	void setHighlightToken(const HighlightTokenState& state);
 
 	virtual QSize sizeHint() const override;
@@ -158,6 +172,7 @@ public:
 	void updateFonts();
 	void refreshHeader(FunctionRef func);
 	void setCurrentFunction(FunctionRef func);
+	void setGraphType(BNFunctionGraphType graphType);
 	void setHeaderHighlightToken(const HighlightTokenState& state);
 
 protected:

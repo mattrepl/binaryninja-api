@@ -1684,6 +1684,12 @@ size_t BinaryView::GetInstructionLength(Architecture* arch, uint64_t addr)
 }
 
 
+bool BinaryView::GetStringAtAddress(uint64_t addr, BNStringReference& strRef)
+{
+	return BNGetStringAtAddress(m_object, addr, &strRef);
+}
+
+
 vector<BNStringReference> BinaryView::GetStrings()
 {
 	size_t count;
@@ -1924,6 +1930,23 @@ map<QualifiedName, Ref<Type>> BinaryView::GetTypes()
 	}
 
 	BNFreeTypeList(types, count);
+	return result;
+}
+
+
+vector<QualifiedName> BinaryView::GetTypeNames(const string& matching)
+{
+	size_t count;
+	BNQualifiedName* names = BNGetAnalysisTypeNames(m_object, &count, matching.c_str());
+
+	vector<QualifiedName> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		result.push_back(QualifiedName::FromAPIObject(&names[i]));
+	}
+
+	BNFreeTypeNameList(names, count);
 	return result;
 }
 
@@ -2402,9 +2425,11 @@ bool BinaryView::ParseExpression(Ref<BinaryView> view, const string& expression,
 	char* err = nullptr;
 	if (!BNParseExpression(view ? view->GetObject() : nullptr, expression.c_str(), &offset, here, &err))
 	{
-		LogDebug("Failed to parse expression: '%s': Error: '%s'", expression.c_str(), err);
-		errorString = string(err);
-		BNFreeParseError(err);
+		if (err)
+		{
+			errorString = string(err);
+			BNFreeParseError(err);
+		}
 		return false;
 	}
 	return true;

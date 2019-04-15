@@ -1403,6 +1403,7 @@ namespace BinaryNinja
 		bool SkipAndReturnValue(Architecture* arch, uint64_t addr, uint64_t value);
 		size_t GetInstructionLength(Architecture* arch, uint64_t addr);
 
+		bool GetStringAtAddress(uint64_t addr, BNStringReference& strRef);
 		std::vector<BNStringReference> GetStrings();
 		std::vector<BNStringReference> GetStrings(uint64_t start, uint64_t len);
 
@@ -1432,6 +1433,7 @@ namespace BinaryNinja
 		bool ParseTypeString(const std::string& text, std::map<QualifiedName, Ref<Type>>& result, std::string& errors);
 
 		std::map<QualifiedName, Ref<Type>> GetTypes();
+		std::vector<QualifiedName> GetTypeNames(const std::string& matching="");
 		Ref<Type> GetTypeByName(const QualifiedName& name);
 		Ref<Type> GetTypeById(const std::string& id);
 		std::string GetTypeId(const QualifiedName& name);
@@ -2412,11 +2414,11 @@ namespace BinaryNinja
 		bool HasUndeterminedOutgoingEdges() const;
 		bool CanExit() const;
 
-		std::set<Ref<BasicBlock>> GetDominators() const;
-		std::set<Ref<BasicBlock>> GetStrictDominators() const;
-		Ref<BasicBlock> GetImmediateDominator() const;
-		std::set<Ref<BasicBlock>> GetDominatorTreeChildren() const;
-		std::set<Ref<BasicBlock>> GetDominanceFrontier() const;
+		std::set<Ref<BasicBlock>> GetDominators(bool post = false) const;
+		std::set<Ref<BasicBlock>> GetStrictDominators(bool post = false) const;
+		Ref<BasicBlock> GetImmediateDominator(bool post = false) const;
+		std::set<Ref<BasicBlock>> GetDominatorTreeChildren(bool post = false) const;
+		std::set<Ref<BasicBlock>> GetDominanceFrontier(bool post = false) const;
 		static std::set<Ref<BasicBlock>> GetIteratedDominanceFrontier(const std::set<Ref<BasicBlock>>& blocks);
 
 		void MarkRecentUse();
@@ -2716,8 +2718,8 @@ namespace BinaryNinja
 		BNNewFlowGraphNodeReference, BNFreeFlowGraphNode>
 	{
 		std::vector<DisassemblyTextLine> m_cachedLines;
-		std::vector<FlowGraphEdge> m_cachedEdges;
-		bool m_cachedLinesValid, m_cachedEdgesValid;
+		std::vector<FlowGraphEdge> m_cachedEdges, m_cachedIncomingEdges;
+		bool m_cachedLinesValid, m_cachedEdgesValid, m_cachedIncomingEdgesValid;
 
 	public:
 		FlowGraphNode(FlowGraph* graph);
@@ -2734,6 +2736,7 @@ namespace BinaryNinja
 		const std::vector<DisassemblyTextLine>& GetLines();
 		void SetLines(const std::vector<DisassemblyTextLine>& lines);
 		const std::vector<FlowGraphEdge>& GetOutgoingEdges();
+		const std::vector<FlowGraphEdge>& GetIncomingEdges();
 		void AddOutgoingEdge(BNBranchType type, FlowGraphNode* target);
 
 		BNHighlightColor GetHighlight() const;

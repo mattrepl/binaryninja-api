@@ -212,17 +212,17 @@ class DataVariable(object):
 	@property
 	def data_refs_from(self):
 		"""data cross references from this data variable (read-only)"""
-		return self.view.get_data_refs_from(self.address, len(self.type))
+		return self.view.get_data_refs_from(self.address, max(1, len(self)))
 
 	@property
 	def data_refs(self):
 		"""data cross references to this data variable (read-only)"""
-		return self.view.get_data_refs(self.address, len(self.type))
+		return self.view.get_data_refs(self.address, max(1, len(self)))
 
 	@property
 	def code_refs(self):
 		"""code references to this data variable (read-only)"""
-		return self.view.get_code_refs(self.address, len(self.type))
+		return self.view.get_code_refs(self.address, max(1, len(self)))
 
 	def __len__(self):
 		return len(self.type)
@@ -1194,6 +1194,17 @@ class BinaryView(object):
 			name = types.QualifiedName._from_core_struct(type_list[i].name)
 			result[name] = types.Type(core.BNNewTypeReference(type_list[i].type), platform = self.platform)
 		core.BNFreeTypeList(type_list, count.value)
+		return result
+
+	@property
+	def type_names(self):
+		"""List of defined type names (read-only)"""
+		count = ctypes.c_ulonglong(0)
+		name_list = core.BNGetAnalysisTypeNames(self.handle, count, "")
+		result = []
+		for i in range(0, count.value):
+			result.append(types.QualifiedName._from_core_struct(name_list[i]))
+		core.BNFreeTypeNameList(name_list, count.value)
 		return result
 
 	@property
@@ -3122,7 +3133,31 @@ class BinaryView(object):
 			result.append(StringReference(self, StringType(strings[i].type), strings[i].start, strings[i].length))
 		core.BNFreeStringReferenceList(strings)
 		return result
-	
+
+	def get_string_at(self, addr, partial=False):
+		"""
+		``get_string_at`` returns the string that falls on given virtual address.
+
+		:param int addr: virtual address to get the string from
+		:param bool partial: whether to return a partial string reference or not
+		:return: returns the StringReference at the given virtual address, otherwise None.
+		:rtype: StringReference
+		:Example:
+
+			>>> bv.get_string_at(0x40302f)
+			<StringType.AsciiString: 0x403028, len 0x12>
+
+		"""
+		str_ref = core.BNStringReference()
+		if not core.BNGetStringAtAddress(self.handle, addr, str_ref):
+			return None
+		if str_ref.type != StringType.AsciiString:
+			partial = False
+			log.log_warn("Partial string not supported at 0x{}".format(hex(addr)))
+		start = addr if partial else str_ref.start
+		length = str_ref.length - (addr - str_ref.start) if partial else str_ref.length
+		return StringReference(self, StringType(str_ref.type), start, length)
+
 	def get_ascii_string_at(self, addr, min_length=4, max_length=None, require_cstring=True):
 		"""
 		``get_ascii_string_at`` returns the string found at ``addr``
