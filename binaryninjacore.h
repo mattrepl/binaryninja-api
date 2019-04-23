@@ -2782,12 +2782,12 @@ extern "C"
 	BINARYNINJACOREAPI uint64_t BNGetNextFunctionStartAfterAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetNextBasicBlockStartAfterAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetNextDataAfterAddress(BNBinaryView* view, uint64_t addr);
-	BINARYNINJACOREAPI uint64_t BNGetNextDataVariableAfterAddress(BNBinaryView* view, uint64_t addr);
+	BINARYNINJACOREAPI uint64_t BNGetNextDataVariableStartAfterAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetPreviousFunctionStartBeforeAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetPreviousBasicBlockStartBeforeAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetPreviousBasicBlockEndBeforeAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI uint64_t BNGetPreviousDataBeforeAddress(BNBinaryView* view, uint64_t addr);
-	BINARYNINJACOREAPI uint64_t BNGetPreviousDataVariableBeforeAddress(BNBinaryView* view, uint64_t addr);
+	BINARYNINJACOREAPI uint64_t BNGetPreviousDataVariableStartBeforeAddress(BNBinaryView* view, uint64_t addr);
 
 	BINARYNINJACOREAPI BNLinearDisassemblyPosition BNGetLinearDisassemblyPositionForAddress(BNBinaryView* view,
 		uint64_t addr, BNDisassemblySettings* settings);
@@ -3327,6 +3327,8 @@ extern "C"
 	BINARYNINJACOREAPI BNStructure* BNNewStructureReference(BNStructure* s);
 	BINARYNINJACOREAPI void BNFreeStructure(BNStructure* s);
 
+	BINARYNINJACOREAPI BNStructureMember* BNGetStructureMemberByName(BNStructure* s, const char* name);
+	BINARYNINJACOREAPI void BNFreeStructureMember(BNStructureMember* s);
 	BINARYNINJACOREAPI BNStructureMember* BNGetStructureMembers(BNStructure* s, size_t* count);
 	BINARYNINJACOREAPI void BNFreeStructureMemberList(BNStructureMember* members, size_t count);
 	BINARYNINJACOREAPI uint64_t BNGetStructureWidth(BNStructure* s);
