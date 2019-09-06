@@ -10,6 +10,7 @@
 #include <stack>
 #include <utility>
 #include <vector>
+#include "dockhandler.h"
 #include "filecontext.h"
 #include "viewtype.h"
 #include "action.h"
@@ -79,8 +80,9 @@ public:
 	void setBinaryDataNavigable(bool navigable) { m_binaryDataNavigable = navigable; }
 
 	virtual bool closeRequest() { return true; }
-	virtual void closing() {}
-	virtual void updateFonts() {}
+	virtual void closing() { }
+	virtual void updateFonts() { }
+	virtual void updateTheme() { }
 
 	virtual void undo();
 	virtual void redo();
@@ -154,18 +156,19 @@ public:
 	virtual View* getView() = 0;
 };
 
-class FunctionsView;
+class SymbolsView;
 
 class BINARYNINJAUIAPI ViewFrame : public QWidget
 {
 	Q_OBJECT
 
 private:
-	QWidget* createView(const QString& typeName, ViewType* type, BinaryViewRef data, bool createExtendedViews = true);
+	QWidget* createView(const QString& typeName, ViewType* type, BinaryViewRef data, bool createDynamicWidgets = true);
 	HistoryEntry* getHistoryEntry();
 
 	FileContext* m_context;
 	BinaryViewRef m_data;
+	DockHandler* m_docks;
 	QWidget* m_view;
 	QWidget* m_viewContainer;
 	QVBoxLayout* m_viewLayout;
@@ -187,7 +190,7 @@ protected:
 	void setView(QWidget* view);
 
 public:
-	explicit ViewFrame(QWidget* parent, FileContext* file, const QString& type, bool createExtendedViews = false);
+	explicit ViewFrame(QWidget* parent, FileContext* file, const QString& type, bool createDynamicWidgets = false);
 	virtual ~ViewFrame();
 
 	FileContext* getFileContext() const { return m_context; }
@@ -208,7 +211,7 @@ public:
 	bool isGraphViewPreferred() { return m_graphViewPreferred; }
 	void setGraphViewPreferred(bool graphViewPreferred) { m_graphViewPreferred = graphViewPreferred; }
 	void focus();
-	void closeFeatureMap();
+	void closeFeatureMap(bool recreate = false);
 	QWidget* createFeatureMap();
 	void refreshFeatureMap();
 
@@ -238,11 +241,15 @@ public:
 		uint64_t currentAddress, const QString& title = "Go to Address", const QString& msg = "Address:");
 
 	void setCurrentFunction(FunctionRef func);
-	void updateFeatureMapLocation(View* view);
 	void updateCrossReferences();
 	void showCrossReferences();
 	void nextCrossReference();
 	void prevCrossReference();
+
+	void showTags();
+	void editTag(TagRef tag);
+	void nextTag();
+	void prevTag();
 
 	virtual UIActionContext actionContext();
 	void bindActions();
@@ -255,11 +262,11 @@ public Q_SLOTS:
 	virtual void compile();
 
 private Q_SLOTS:
-	void deleteFeatureMap();
+	void deleteFeatureMap(bool recreate);
 
 Q_SIGNALS:
-	void notifyCloseFeatureMap();
-	void nofifyViewChanged(ViewFrame* frame);
+	void notifyCloseFeatureMap(bool recreate);
+	void notifyViewChanged(ViewFrame* frame);
 };
 
 Q_DECLARE_METATYPE(View*)

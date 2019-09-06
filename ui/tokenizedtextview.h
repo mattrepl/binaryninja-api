@@ -88,6 +88,7 @@ class BINARYNINJAUIAPI TokenizedTextView: public QAbstractScrollArea, public Vie
 	void makePtr();
 	void makeString();
 	void changeType();
+	void inferStructureType();
 	size_t getStringLength(uint64_t startAddr);
 
 	void displayAsDefault();
@@ -136,6 +137,7 @@ public:
 	virtual void OnDataVariableAdded(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
 	virtual void OnDataVariableRemoved(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
 	virtual void OnDataVariableUpdated(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
+	virtual void OnDataMetadataUpdated(BinaryNinja::BinaryView* view, uint64_t offset) override;
 
 	virtual void updateFonts() override;
 

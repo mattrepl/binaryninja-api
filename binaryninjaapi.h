@@ -95,15 +95,22 @@ namespace BinaryNinja
 		{
 #ifdef WIN32
 			if (InterlockedDecrement((LONG*)&m_refs) == 0)
-				delete this;
+			{
+				if (!m_registeredRef)
+					delete this;
+			}
 #else
 			if (__sync_fetch_and_add(&m_refs, -1) == 1)
-				delete this;
+			{
+				if (!m_registeredRef)
+					delete this;
+			}
 #endif
 		}
 
 	public:
 		int m_refs;
+		bool m_registeredRef = false;
 		T* m_object;
 		CoreRefCountObject(): m_refs(0), m_object(nullptr) {}
 		virtual ~CoreRefCountObject() {}
@@ -133,13 +140,15 @@ namespace BinaryNinja
 
 		void AddRefForRegistration()
 		{
-			AddRefInternal();
+			m_registeredRef = true;
 		}
 
 		void ReleaseForRegistration()
 		{
 			m_object = nullptr;
-			ReleaseInternal();
+			m_registeredRef = false;
+			if (m_refs == 0)
+				delete this;
 		}
 	};
 
@@ -232,6 +241,14 @@ namespace BinaryNinja
 			}
 		}
 
+		Ref<T>(Ref<T>&& other) : m_obj(other.m_obj)
+		{
+			other.m_obj = 0;
+#ifdef BN_REF_COUNT_DEBUG
+			m_assignmentTrace = other.m_assignmentTrace;
+#endif
+		}
+
 		~Ref<T>()
 		{
 			if (m_obj)
@@ -257,6 +274,22 @@ namespace BinaryNinja
 				m_obj->AddRef();
 			if (oldObj)
 				oldObj->Release();
+			return *this;
+		}
+
+		Ref<T>& operator=(Ref<T>&& other)
+		{
+			if (this != &other)
+			{
+				if (!m_obj)
+					m_obj = other.m_obj;
+				else if (m_obj != other.m_obj)
+				{
+					m_obj->Release();
+					m_obj = other.m_obj;
+				}
+				other.m_obj = 0;
+			}
 			return *this;
 		}
 
@@ -535,6 +568,7 @@ namespace BinaryNinja
 	class Architecture;
 	class BackgroundTask;
 	class Platform;
+	class Settings;
 	class Type;
 	class DataBuffer;
 	class MainThreadAction;
@@ -605,6 +639,8 @@ namespace BinaryNinja
 	                      std::string& output, std::string& errors,
 	                      const std::vector<std::string>& includeDirs = std::vector<std::string>());
 
+	void DisablePlugins();
+	bool IsPluginsEnabled();
 	void InitCorePlugins();
 	void InitUserPlugins();
 	void InitRepoPlugins();
@@ -696,6 +732,9 @@ namespace BinaryNinja
 		BNMessageBoxButtonSet buttons = OKButtonSet, BNMessageBoxIcon icon = InformationIcon);
 
 	std::string GetUniqueIdentifierString();
+
+	std::map<std::string, uint64_t> GetMemoryUsageInfo();
+	std::vector<std::string> GetRegisteredPluginLoaders();
 
 	class DataBuffer
 	{
@@ -866,6 +905,8 @@ namespace BinaryNinja
 
 	class Function;
 	struct DataVariable;
+	class Symbol;
+	class Tag;
 
 	class BinaryDataNotification
 	{
@@ -882,6 +923,10 @@ namespace BinaryNinja
 		static void DataVariableAddedCallback(void* ctxt, BNBinaryView* data, BNDataVariable* var);
 		static void DataVariableRemovedCallback(void* ctxt, BNBinaryView* data, BNDataVariable* var);
 		static void DataVariableUpdatedCallback(void* ctxt, BNBinaryView* data, BNDataVariable* var);
+		static void SymbolAddedCallback(void* ctxt, BNBinaryView* view, BNSymbol* sym);
+		static void SymbolUpdatedCallback(void* ctxt, BNBinaryView* view, BNSymbol* sym);
+		static void SymbolRemovedCallback(void* ctxt, BNBinaryView* view, BNSymbol* sym);
+		static void DataMetadataUpdatedCallback(void* ctxt, BNBinaryView* object, uint64_t offset);
 		static void StringFoundCallback(void* ctxt, BNBinaryView* data, BNStringType type, uint64_t offset, size_t len);
 		static void StringRemovedCallback(void* ctxt, BNBinaryView* data, BNStringType type, uint64_t offset, size_t len);
 		static void TypeDefinedCallback(void* ctxt, BNBinaryView* data, BNQualifiedName* name, BNType* type);
@@ -903,6 +948,10 @@ namespace BinaryNinja
 		virtual void OnDataVariableAdded(BinaryView* view, const DataVariable& var) { (void)view; (void)var; }
 		virtual void OnDataVariableRemoved(BinaryView* view, const DataVariable& var) { (void)view; (void)var; }
 		virtual void OnDataVariableUpdated(BinaryView* view, const DataVariable& var) { (void)view; (void)var; }
+		virtual void OnDataMetadataUpdated(BinaryView* view, uint64_t offset) { (void)view; (void)offset; }
+		virtual void OnSymbolAdded(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
+		virtual void OnSymbolUpdated(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
+		virtual void OnSymbolRemoved(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
 		virtual void OnStringFound(BinaryView* data, BNStringType type, uint64_t offset, size_t len) { (void)data; (void)type; (void)offset; (void)len; }
 		virtual void OnStringRemoved(BinaryView* data, BNStringType type, uint64_t offset, size_t len) { (void)data; (void)type; (void)offset; (void)len; }
 		virtual void OnTypeDefined(BinaryView* data, const QualifiedName& name, Type* type) { (void)data; (void)name; (void)type; }
@@ -1053,6 +1102,7 @@ namespace BinaryNinja
 		uint64_t GetOrdinal() const;
 		bool IsAutoDefined() const;
 		NameSpace GetNameSpace() const;
+		std::vector<std::string> GetAliases() const;
 
 		static Ref<Symbol> ImportedFunctionFromImportAddressSymbol(Symbol* sym, uint64_t addr);
 	};
@@ -1066,9 +1116,15 @@ namespace BinaryNinja
 
 	struct InstructionTextToken
 	{
+		enum
+		{
+			WidthIsByteCount = 0
+		};
+
 		BNInstructionTextTokenType type;
 		std::string text;
 		uint64_t value;
+		uint64_t width;
 		size_t size, operand;
 		BNInstructionTextTokenContext context;
 		uint8_t confidence;
@@ -1079,10 +1135,10 @@ namespace BinaryNinja
 		InstructionTextToken(uint8_t confidence, BNInstructionTextTokenType t, const std::string& txt);
 		InstructionTextToken(BNInstructionTextTokenType type, const std::string& text, uint64_t value = 0,
 			size_t size = 0, size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE,
-			const std::vector<std::string>& typeName={});
+			const std::vector<std::string>& typeName={}, uint64_t width = WidthIsByteCount);
 		InstructionTextToken(BNInstructionTextTokenType type, BNInstructionTextTokenContext context,
 			const std::string& text, uint64_t address, uint64_t value = 0, size_t size = 0,
-			size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE, const std::vector<std::string>& typeName={});
+			size_t operand = BN_INVALID_OPERAND, uint8_t confidence = BN_FULL_CONFIDENCE, const std::vector<std::string>& typeName={}, uint64_t width = WidthIsByteCount);
 		InstructionTextToken(const BNInstructionTextToken& token);
 
 		InstructionTextToken WithConfidence(uint8_t conf);
@@ -1092,12 +1148,14 @@ namespace BinaryNinja
 	};
 
 
+	class Tag;
 	struct DisassemblyTextLine
 	{
 		uint64_t addr;
 		size_t instrIndex;
 		std::vector<InstructionTextToken> tokens;
 		BNHighlightColor highlight;
+		std::vector<Ref<Tag>> tags;
 
 		DisassemblyTextLine();
 	};
@@ -1161,6 +1219,67 @@ namespace BinaryNinja
 		uint64_t address;
 		Confidence<Ref<Type>> type;
 		bool autoDiscovered;
+	};
+
+	class TagType: public CoreRefCountObject<BNTagType, BNNewTagTypeReference, BNFreeTagType>
+	{
+	public:
+		typedef BNTagTypeType Type;
+
+		TagType(BNTagType* tagType);
+		TagType(BinaryView* view);
+		TagType(BinaryView* view, const std::string& name, const std::string& icon, bool visible = true, Type type = UserTagType);
+
+		BinaryView* GetView() const;
+		std::string GetName() const;
+		void SetName(const std::string& name);
+		std::string GetIcon() const;
+		void SetIcon(const std::string& icon);
+		bool GetVisible() const;
+		void SetVisible(bool visible);
+		Type GetType() const;
+		void SetType(Type type);
+	};
+
+	class Tag: public CoreRefCountObject<BNTag, BNNewTagReference, BNFreeTag>
+	{
+	public:
+		Tag(BNTag* tag);
+		Tag(Ref<TagType> type, const std::string& data = "");
+
+		Ref<TagType> GetType() const;
+		std::string GetData() const;
+		void SetData(const std::string& data);
+
+		static BNTag** CreateTagList(const std::vector<Ref<Tag>>& tags, size_t* count);
+		static std::vector<Ref<Tag>> ConvertTagList(BNTag** tags, size_t count);
+		static std::vector<Ref<Tag>> ConvertAndFreeTagList(BNTag** tags, size_t count);
+	};
+
+	class Architecture;
+	class Function;
+	struct TagReference
+	{
+		typedef BNTagReferenceType RefType;
+
+		RefType refType;
+		bool autoDefined;
+		Ref<Tag> tag;
+		Ref<Architecture> arch;
+		Ref<Function> func;
+		uint64_t addr;
+
+		TagReference();
+		TagReference(const BNTagReference& ref);
+
+		bool operator==(const TagReference& other) const;
+		bool operator!=(const TagReference& other) const;
+
+		operator BNTagReference() const;
+
+		static BNTagReference* CreateTagReferenceList(const std::vector<TagReference>& tags, size_t* count);
+		static std::vector<TagReference> ConvertTagReferenceList(BNTagReference* tags, size_t count);
+		static std::vector<TagReference> ConvertAndFreeTagReferenceList(BNTagReference* tags, size_t count);
 	};
 
 	class Relocation;
@@ -1402,10 +1521,18 @@ namespace BinaryNinja
 
 		std::vector<ReferenceSource> GetCodeReferences(uint64_t addr);
 		std::vector<ReferenceSource> GetCodeReferences(uint64_t addr, uint64_t len);
+		std::vector<uint64_t> GetCodeReferencesFrom(ReferenceSource src);
+		std::vector<uint64_t> GetCodeReferencesFrom(ReferenceSource src, uint64_t len);
+
 		std::vector<uint64_t> GetDataReferences(uint64_t addr);
 		std::vector<uint64_t> GetDataReferences(uint64_t addr, uint64_t len);
 		std::vector<uint64_t> GetDataReferencesFrom(uint64_t addr);
 		std::vector<uint64_t> GetDataReferencesFrom(uint64_t addr, uint64_t len);
+		void AddUserDataReference(uint64_t fromAddr, uint64_t toAddr);
+		void RemoveUserDataReference(uint64_t fromAddr, uint64_t toAddr);
+
+		std::vector<uint64_t> GetCallees(ReferenceSource addr);
+		std::vector<ReferenceSource> GetCallers(uint64_t addr);
 
 		Ref<Symbol> GetSymbolByAddress(uint64_t addr, const NameSpace& nameSpace=NameSpace());
 		Ref<Symbol> GetSymbolByRawName(const std::string& name, const NameSpace& nameSpace=NameSpace());
@@ -1414,6 +1541,7 @@ namespace BinaryNinja
 		std::vector<Ref<Symbol>> GetSymbols(uint64_t start, uint64_t len, const NameSpace& nameSpace=NameSpace());
 		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type, const NameSpace& nameSpace=NameSpace());
 		std::vector<Ref<Symbol>> GetSymbolsOfType(BNSymbolType type, uint64_t start, uint64_t len, const NameSpace& nameSpace=NameSpace());
+		std::vector<Ref<Symbol>> GetVisibleSymbols(const NameSpace& nameSpace=NameSpace());
 
 		void DefineAutoSymbol(Ref<Symbol> sym);
 		void DefineAutoSymbolAndVariableOrFunction(Ref<Platform> platform, Ref<Symbol> sym, Ref<Type> type);
@@ -1423,6 +1551,38 @@ namespace BinaryNinja
 		void UndefineUserSymbol(Ref<Symbol> sym);
 
 		void DefineImportedFunction(Ref<Symbol> importAddressSym, Ref<Function> func);
+
+		void AddTagType(Ref<TagType> tagType);
+		void RemoveTagType(Ref<TagType> tagType);
+		Ref<TagType> GetTagType(const std::string& name);
+		Ref<TagType> GetTagType(const std::string& name, TagType::Type type);
+		std::vector<Ref<TagType>> GetTagTypes();
+
+		void AddTag(Ref<Tag> tag);
+		void RemoveTag(Ref<Tag> tag);
+		Ref<Tag> GetTag(uint64_t tagId);
+
+		std::vector<TagReference> GetAllTagReferences();
+		std::vector<TagReference> GetAllAddressTagReferences();
+		std::vector<TagReference> GetAllFunctionTagReferences();
+		std::vector<TagReference> GetAllTagReferencesOfType(Ref<TagType> tagType);
+		std::vector<TagReference> GetTagReferencesOfType(Ref<TagType> tagType);
+
+		std::vector<TagReference> GetDataTagReferences();
+		std::vector<Ref<Tag>> GetDataTags(uint64_t addr);
+		std::vector<Ref<Tag>> GetDataTagsOfType(uint64_t addr, Ref<TagType> tagType);
+		std::vector<Ref<Tag>> GetDataTagsInRange(uint64_t start, uint64_t end);
+		void AddAutoDataTag(uint64_t addr, Ref<Tag> tag);
+		void RemoveAutoDataTag(uint64_t addr, Ref<Tag> tag);
+		void AddUserDataTag(uint64_t addr, Ref<Tag> tag);
+		void RemoveUserDataTag(uint64_t addr, Ref<Tag> tag);
+		void RemoveTagReference(const TagReference& ref);
+
+		Ref<Tag> CreateAutoDataTag(uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserDataTag(uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique = false);
+
+		Ref<Tag> CreateAutoDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
 
 		bool IsNeverBranchPatchAvailable(Architecture* arch, uint64_t addr);
 		bool IsAlwaysBranchPatchAvailable(Architecture* arch, uint64_t addr);
@@ -1525,6 +1685,10 @@ namespace BinaryNinja
 
 		std::vector<std::string> GetUniqueSectionNames(const std::vector<std::string>& names);
 
+		std::string GetCommentForAddress(uint64_t addr) const;
+		std::vector<uint64_t> GetCommentedAddresses() const;
+		void SetCommentForAddress(uint64_t addr, const std::string& comment);
+
 		std::vector<BNAddressRange> GetAllocatedRanges();
 
 		void StoreMetadata(const std::string& key, Ref<Metadata> value);
@@ -1533,6 +1697,9 @@ namespace BinaryNinja
 		std::string GetStringMetadata(const std::string& key);
 		std::vector<uint8_t> GetRawMetadata(const std::string& key);
 		uint64_t GetUIntMetadata(const std::string& key);
+
+		Ref<Settings> GetLoadSettings(const std::string& typeName);
+		void SetLoadSettings(const std::string& typeName, Ref<Settings> settings);
 
 		BNAnalysisParameters GetParametersForAnalysis();
 		void SetParametersForAnalysis(BNAnalysisParameters params);
@@ -1546,6 +1713,8 @@ namespace BinaryNinja
 		static NameSpace GetExternalNameSpace();
 
 		static bool ParseExpression(Ref<BinaryView> view, const std::string& expression, uint64_t &offset, uint64_t here, std::string& errorString);
+		bool HasSymbols() const;
+		bool HasDataVariables() const;
 	};
 
 
@@ -1580,6 +1749,7 @@ namespace BinaryNinja
 
 		static BNBinaryView* CreateCallback(void* ctxt, BNBinaryView* data);
 		static bool IsValidCallback(void* ctxt, BNBinaryView* data);
+		static BNSettings* GetSettingsCallback(void* ctxt, BNBinaryView* data);
 
 		BinaryViewType(BNBinaryViewType* type);
 
@@ -1607,6 +1777,7 @@ namespace BinaryNinja
 
 		virtual BinaryView* Create(BinaryView* data) = 0;
 		virtual bool IsTypeValidForData(BinaryView* data) = 0;
+		virtual Ref<Settings> GetLoadSettingsForData(BinaryView* data) = 0;
 	};
 
 	class CoreBinaryViewType: public BinaryViewType
@@ -1615,6 +1786,7 @@ namespace BinaryNinja
 		CoreBinaryViewType(BNBinaryViewType* type);
 		virtual BinaryView* Create(BinaryView* data) override;
 		virtual bool IsTypeValidForData(BinaryView* data) override;
+		virtual Ref<Settings> GetLoadSettingsForData(BinaryView* data) override;
 	};
 
 	class ReadException: public std::exception
@@ -2577,6 +2749,11 @@ namespace BinaryNinja
 		void SetComment(const std::string& comment);
 		void SetCommentForAddress(uint64_t addr, const std::string& comment);
 
+		std::vector<ReferenceSource> GetCallSites() const;
+
+		void AddUserCodeReference(Architecture* fromArch, uint64_t fromAddr, uint64_t toAddr);
+		void RemoveUserCodeReference(Architecture* fromArch, uint64_t fromAddr, uint64_t toAddr);
+
 		Ref<LowLevelILFunction> GetLowLevelIL() const;
 		size_t GetLowLevelILForInstruction(Architecture* arch, uint64_t addr);
 		std::vector<size_t> GetLowLevelILExitsForInstruction(Architecture* arch, uint64_t addr);
@@ -2699,6 +2876,35 @@ namespace BinaryNinja
 		void SetUserInstructionHighlight(Architecture* arch, uint64_t addr, uint8_t r, uint8_t g, uint8_t b,
 			uint8_t alpha = 255);
 
+		std::vector<TagReference> GetAllTagReferences();
+		std::vector<TagReference> GetTagReferencesOfType(Ref<TagType> tagType);
+
+		std::vector<TagReference> GetAddressTagReferences();
+		std::vector<Ref<Tag>> GetAddressTags(Architecture* arch, uint64_t addr);
+		std::vector<Ref<Tag>> GetAddressTagsOfType(Architecture* arch, uint64_t addr, Ref<TagType> tagType);
+		void AddAutoAddressTag(Architecture* arch, uint64_t addr, Ref<Tag> tag);
+		void RemoveAutoAddressTag(Architecture* arch, uint64_t addr, Ref<Tag> tag);
+		void AddUserAddressTag(Architecture* arch, uint64_t addr, Ref<Tag> tag);
+		void RemoveUserAddressTag(Architecture* arch, uint64_t addr, Ref<Tag> tag);
+
+		std::vector<TagReference> GetFunctionTagReferences();
+		std::vector<Ref<Tag>> GetFunctionTags();
+		std::vector<Ref<Tag>> GetFunctionTagsOfType(Ref<TagType> tagType);
+		void AddAutoFunctionTag(Ref<Tag> tag);
+		void RemoveAutoFunctionTag(Ref<Tag> tag);
+		void AddUserFunctionTag(Ref<Tag> tag);
+		void RemoveUserFunctionTag(Ref<Tag> tag);
+
+		Ref<Tag> CreateAutoAddressTag(Architecture* arch, uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserAddressTag(Architecture* arch, uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique = false);
+		Ref<Tag> CreateAutoFunctionTag(const std::string& tagTypeName, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserFunctionTag(const std::string& tagTypeName, const std::string& data, bool unique = false);
+
+		Ref<Tag> CreateAutoAddressTag(Architecture* arch, uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserAddressTag(Architecture* arch, uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
+		Ref<Tag> CreateAutoFunctionTag(Ref<TagType> tagType, const std::string& data, bool unique = false);
+		Ref<Tag> CreateUserFunctionTag(Ref<TagType> tagType, const std::string& data, bool unique = false);
+
 		void Reanalyze();
 
 		void RequestAdvancedAnalysisData();
@@ -2804,6 +3010,7 @@ namespace BinaryNinja
 		static void PopulateNodesCallback(void* ctxt);
 		static void CompleteLayoutCallback(void* ctxt);
 		static BNFlowGraph* UpdateCallback(void* ctxt);
+		static void FreeObjectCallback(void* ctxt);
 
 	protected:
 		FlowGraph(BNFlowGraph* graph);
@@ -3938,7 +4145,7 @@ namespace BinaryNinja
 		std::map<uint32_t, QualifiedNameAndType> GetSystemCalls();
 		Ref<Type> GetTypeByName(const QualifiedName& name);
 		Ref<Type> GetVariableByName(const QualifiedName& name);
-		Ref<Type> GetFunctionByName(const QualifiedName& name);
+		Ref<Type> GetFunctionByName(const QualifiedName& name, bool exactMatch = false);
 		std::string GetSystemCallName(uint32_t n);
 		Ref<Type> GetSystemCallType(uint32_t n);
 
@@ -3969,7 +4176,6 @@ namespace BinaryNinja
 	protected:
 		DownloadInstance(DownloadProvider* provider);
 		DownloadInstance(BNDownloadInstance* instance);
-		virtual ~DownloadInstance();
 
 		static void DestroyInstanceCallback(void* ctxt);
 		static int PerformRequestCallback(void* ctxt, const char* url);
@@ -4046,7 +4252,6 @@ namespace BinaryNinja
 	protected:
 		ScriptingInstance(ScriptingProvider* provider);
 		ScriptingInstance(BNScriptingInstance* instance);
-		virtual ~ScriptingInstance();
 
 		static void DestroyInstanceCallback(void* ctxt);
 		static BNScriptingProviderExecuteResult ExecuteScriptInputCallback(void* ctxt, const char* input);
@@ -4056,6 +4261,7 @@ namespace BinaryNinja
 		static void SetCurrentBasicBlockCallback(void* ctxt, BNBasicBlock* block);
 		static void SetCurrentAddressCallback(void* ctxt, uint64_t addr);
 		static void SetCurrentSelectionCallback(void* ctxt, uint64_t begin, uint64_t end);
+		static char* CompleteInputCallback(void* ctxt, const char* text, uint64_t state);
 
 		virtual void DestroyInstance();
 
@@ -4067,6 +4273,7 @@ namespace BinaryNinja
 		virtual void SetCurrentBasicBlock(BasicBlock* block);
 		virtual void SetCurrentAddress(uint64_t addr);
 		virtual void SetCurrentSelection(uint64_t begin, uint64_t end);
+		virtual std::string CompleteInput(const std::string& text, uint64_t state);
 
 		void Output(const std::string& text);
 		void Error(const std::string& text);
@@ -4075,6 +4282,9 @@ namespace BinaryNinja
 
 		void RegisterOutputListener(ScriptingOutputListener* listener);
 		void UnregisterOutputListener(ScriptingOutputListener* listener);
+
+		std::string GetDelimiters();
+		void SetDelimiters(const std::string& delimiters);
 	};
 
 	class CoreScriptingInstance: public ScriptingInstance
@@ -4090,6 +4300,7 @@ namespace BinaryNinja
 		virtual void SetCurrentBasicBlock(BasicBlock* block) override;
 		virtual void SetCurrentAddress(uint64_t addr) override;
 		virtual void SetCurrentSelection(uint64_t begin, uint64_t end) override;
+		virtual std::string CompleteInput(const std::string& text, uint64_t state) override;
 	};
 
 	class ScriptingProvider: public StaticCoreRefCountObject<BNScriptingProvider>
@@ -4233,43 +4444,62 @@ namespace BinaryNinja
 	};
 
 	typedef BNPluginOrigin PluginOrigin;
-	typedef BNPluginUpdateStatus PluginUpdateStatus;
+	typedef BNPluginStatus PluginStatus;
 	typedef BNPluginType PluginType;
 
 	class RepoPlugin: public CoreRefCountObject<BNRepoPlugin, BNNewPluginReference, BNFreePlugin>
 	{
 	public:
 		RepoPlugin(BNRepoPlugin* plugin);
+		PluginStatus GetPluginStatus() const;
+		std::vector<std::string> GetApis() const;
+		std::vector<std::string> GetInstallPlatforms() const;
 		std::string GetPath() const;
-		bool IsInstalled() const;
 		std::string GetPluginDirectory() const;
-		void SetEnabled(bool enabled);
-		bool IsEnabled() const;
-		PluginUpdateStatus GetPluginUpdateStatus() const;
-		std::string GetApi() const;
 		std::string GetAuthor() const;
 		std::string GetDescription() const;
 		std::string GetLicense() const;
 		std::string GetLicenseText() const;
 		std::string GetLongdescription() const;
-		std::string GetMinimimVersions() const;
 		std::string GetName() const;
 		std::vector<PluginType> GetPluginTypes() const;
-		std::string GetUrl() const;
+		std::string GetPackageUrl() const;
+		std::string GetProjectUrl() const;
+		std::string GetAuthorUrl() const;
 		std::string GetVersion() const;
+		std::string GetCommit() const;
+		std::string GetRepository() const;
+		std::string GetProjectData();
+		std::string GetInstallInstructions(const std::string& platform) const;
+		uint64_t GetMinimimVersion() const;
+		uint64_t GetLastUpdate();
+		bool IsBeingDeleted() const;
+		bool IsBeingUpdated() const;
+		bool IsInstalled() const;
+		bool IsEnabled() const;
+		bool IsRunning() const;
+		bool IsUpdatePending() const;
+		bool IsDisablePending() const;
+		bool IsDeletePending() const;
+		bool IsUpdateAvailable() const;
+
+		bool Uninstall();
+		bool Install();
+		// `force` ignores optional checks for platform/api compliance
+		bool Enable(bool force);
+		bool Disable();
+		bool Update();
 	};
 
 	class Repository: public CoreRefCountObject<BNRepository, BNNewRepositoryReference, BNFreeRepository>
 	{
 	public:
 		Repository(BNRepository* repository);
-		~Repository();
 		std::string GetUrl() const;
 		std::string GetRepoPath() const;
 		std::string GetLocalReference() const;
 		std::string GetRemoteReference() const;
 		std::vector<Ref<RepoPlugin>> GetPlugins() const;
-		bool IsInitialized() const;
 		std::string GetPluginDirectory() const;
 		Ref<RepoPlugin> GetPluginByPath(const std::string& pluginPath);
 		std::string GetFullPath() const;
@@ -4277,73 +4507,80 @@ namespace BinaryNinja
 
 	class RepositoryManager: public CoreRefCountObject<BNRepositoryManager, BNNewRepositoryManagerReference, BNFreeRepositoryManager>
 	{
-		bool m_core;
 	public:
 		RepositoryManager(const std::string& enabledPluginsPath);
 		RepositoryManager(BNRepositoryManager* repoManager);
 		RepositoryManager();
-		~RepositoryManager();
 		bool CheckForUpdates();
 		std::vector<Ref<Repository>> GetRepositories();
 		Ref<Repository> GetRepositoryByPath(const std::string& repoName);
-		bool AddRepository(const std::string& url,
-			const std::string& repoPath, // Relative path within the repositories directory
-			const std::string& localReference="master",
-			const std::string& remoteReference="origin");
-		bool EnablePlugin(const std::string& repoName, const std::string& pluginPath);
-		bool DisablePlugin(const std::string& repoName, const std::string& pluginPath);
-		bool InstallPlugin(const std::string& repoName, const std::string& pluginPath);
-		bool UninstallPlugin(const std::string& repoName, const std::string& pluginPath);
+		bool AddRepository(const std::string& url, // URL to raw plugins.json file
+			const std::string& repoPath); // Relative path within the repositories directory
 		Ref<Repository> GetDefaultRepository();
 	};
 
-	class Settings
+	class Settings: public CoreRefCountObject<BNSettings, BNNewSettingsReference, BNFreeSettings>
 	{
-		std::string m_registry;
+		std::string m_instanceId;
+
+		Settings() = delete;
+		Settings(const std::string& m_instanceId);
 
 	public:
-		Settings(const std::string& registry = "default") : m_registry(registry) { }
+		Settings(BNSettings* settings);
+		static Ref<Settings> Instance(const std::string& schemaId = "");
+		virtual ~Settings() {}
+
+		void SetResourceId(const std::string& resourceId = "");
 
 		bool RegisterGroup(const std::string& group, const std::string& title);
-		bool RegisterSetting(const std::string& id, const std::string& properties);
+		bool RegisterSetting(const std::string& key, const std::string& properties);
+		bool Contains(const std::string& key);
+		bool IsEmpty();
+		std::vector<std::string> Keys();
 
-		bool UpdateProperty(const std::string& id, const std::string& property);
-		bool UpdateProperty(const std::string& id, const std::string& property, bool value);
-		bool UpdateProperty(const std::string& id, const std::string& property, double value);
-		bool UpdateProperty(const std::string& id, const std::string& property, int value);
-		bool UpdateProperty(const std::string& id, const std::string& property, int64_t value);
-		bool UpdateProperty(const std::string& id, const std::string& property, uint64_t value);
-		bool UpdateProperty(const std::string& id, const std::string& property, const char* value);
-		bool UpdateProperty(const std::string& id, const std::string& property, const std::string& value);
-		bool UpdateProperty(const std::string& id, const std::string& property, const std::vector<std::string>& value);
+		template<typename T> T QueryProperty(const std::string& key, const std::string& property);
 
-		std::string GetSchema();
+		bool UpdateProperty(const std::string& key, const std::string& property);
+		bool UpdateProperty(const std::string& key, const std::string& property, bool value);
+		bool UpdateProperty(const std::string& key, const std::string& property, double value);
+		bool UpdateProperty(const std::string& key, const std::string& property, int value);
+		bool UpdateProperty(const std::string& key, const std::string& property, int64_t value);
+		bool UpdateProperty(const std::string& key, const std::string& property, uint64_t value);
+		bool UpdateProperty(const std::string& key, const std::string& property, const char* value);
+		bool UpdateProperty(const std::string& key, const std::string& property, const std::string& value);
+		bool UpdateProperty(const std::string& key, const std::string& property, const std::vector<std::string>& value);
+
+		bool DeserializeSchema(const std::string& schema, BNSettingsScope scope = SettingsAutoScope, bool merge = true);
+		std::string SerializeSchema();
 		bool DeserializeSettings(const std::string& contents, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 		std::string SerializeSettings(Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 
-		bool CopyValue(const std::string& destRegistry, const std::string& id);
-		bool Reset(const std::string& id, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool CopyValuesFrom(Ref<Settings> source, BNSettingsScope scope = SettingsAutoScope);
+		bool Reset(const std::string& key, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 		bool ResetAll(Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 
-		template<typename T> T Get(const std::string& id, Ref<BinaryView> view = nullptr, BNSettingsScope* scope = nullptr);
+		template<typename T> T Get(const std::string& key, Ref<BinaryView> view = nullptr, BNSettingsScope* scope = nullptr);
+		std::string GetJson(const std::string& key, Ref<BinaryView> view = nullptr, BNSettingsScope* scope = nullptr);
 
-		bool Set(const std::string& id, bool value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, double value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, int value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, int64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, uint64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, const char* value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, const std::string& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
-		bool Set(const std::string& id, const std::vector<std::string>& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, bool value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, double value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, int value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, int64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, uint64_t value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, const char* value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, const std::string& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool Set(const std::string& key, const std::vector<std::string>& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 	};
 
 	// explicit specializations
-	template<> bool Settings::Get<bool>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
-	template<> double Settings::Get<double>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
-	template<> int64_t Settings::Get<int64_t>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
-	template<> uint64_t Settings::Get<uint64_t>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
-	template<> std::string Settings::Get<std::string>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
-	template<> std::vector<std::string> Settings::Get<std::vector<std::string>>(const std::string& id, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> std::vector<std::string> Settings::QueryProperty<std::vector<std::string>>(const std::string& key, const std::string& property);
+	template<> bool Settings::Get<bool>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> double Settings::Get<double>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> int64_t Settings::Get<int64_t>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> uint64_t Settings::Get<uint64_t>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> std::string Settings::Get<std::string>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
+	template<> std::vector<std::string> Settings::Get<std::vector<std::string>>(const std::string& key, Ref<BinaryView> view, BNSettingsScope* scope);
 
 	typedef BNMetadataType MetadataType;
 
@@ -4462,8 +4699,9 @@ namespace BinaryNinja
 		virtual bool HasDataFlow() const;
 
 		virtual void GetInstructionAnnotations(std::vector<InstructionTextToken>& tokens, uint64_t addr);
-		virtual bool GetInstructionText(uint64_t addr, size_t& len,
-			std::vector<InstructionTextToken>& tokens, uint64_t& displayAddr);
+		virtual bool GetInstructionText(uint64_t addr, size_t& len, std::vector<DisassemblyTextLine>& lines);
+		std::vector<DisassemblyTextLine> PostProcessInstructionTextLines(uint64_t addr,
+			size_t len, const std::vector<DisassemblyTextLine>& lines);
 
 		virtual bool GetDisassemblyText(uint64_t addr, size_t& len, std::vector<DisassemblyTextLine>& lines);
 		void ResetDeduplicatedComments();

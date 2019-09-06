@@ -114,6 +114,41 @@ void BinaryDataNotification::DataVariableUpdatedCallback(void* ctxt, BNBinaryVie
 }
 
 
+void BinaryDataNotification::DataMetadataUpdatedCallback(void* ctxt, BNBinaryView* object, uint64_t offset)
+{
+	BinaryDataNotification* notify = (BinaryDataNotification*)ctxt;
+	Ref<BinaryView> view = new BinaryView(BNNewViewReference(object));
+	notify->OnDataMetadataUpdated(view, offset);
+}
+
+
+void BinaryDataNotification::SymbolAddedCallback(void* ctxt, BNBinaryView* object, BNSymbol* symobj)
+{
+	BinaryDataNotification* notify = (BinaryDataNotification*)ctxt;
+	Ref<BinaryView> view = new BinaryView(BNNewViewReference(object));
+	Ref<Symbol> sym = new Symbol(BNNewSymbolReference(symobj));
+	notify->OnSymbolAdded(view, sym);
+}
+
+
+void BinaryDataNotification::SymbolUpdatedCallback(void* ctxt, BNBinaryView* object, BNSymbol* symobj)
+{
+	BinaryDataNotification* notify = (BinaryDataNotification*)ctxt;
+	Ref<BinaryView> view = new BinaryView(BNNewViewReference(object));
+	Ref<Symbol> sym = new Symbol(BNNewSymbolReference(symobj));
+	notify->OnSymbolUpdated(view, sym);
+}
+
+
+void BinaryDataNotification::SymbolRemovedCallback(void* ctxt, BNBinaryView* object, BNSymbol* symobj)
+{
+	BinaryDataNotification* notify = (BinaryDataNotification*)ctxt;
+	Ref<BinaryView> view = new BinaryView(BNNewViewReference(object));
+	Ref<Symbol> sym = new Symbol(BNNewSymbolReference(symobj));
+	notify->OnSymbolRemoved(view, sym);
+}
+
+
 void BinaryDataNotification::StringFoundCallback(void* ctxt, BNBinaryView* object, BNStringType type, uint64_t offset, size_t len)
 {
 	BinaryDataNotification* notify = (BinaryDataNotification*)ctxt;
@@ -161,6 +196,10 @@ BinaryDataNotification::BinaryDataNotification()
 	m_callbacks.dataVariableAdded = DataVariableAddedCallback;
 	m_callbacks.dataVariableRemoved = DataVariableRemovedCallback;
 	m_callbacks.dataVariableUpdated = DataVariableUpdatedCallback;
+	m_callbacks.dataMetadataUpdated = DataMetadataUpdatedCallback;
+	m_callbacks.symbolAdded = SymbolAddedCallback;
+	m_callbacks.symbolUpdated = SymbolUpdatedCallback;
+	m_callbacks.symbolRemoved = SymbolRemovedCallback;
 	m_callbacks.stringFound = StringFoundCallback;
 	m_callbacks.stringRemoved = StringRemovedCallback;
 	m_callbacks.typeDefined = TypeDefinedCallback;
@@ -265,6 +304,20 @@ Ref<Symbol> Symbol::ImportedFunctionFromImportAddressSymbol(Symbol* sym, uint64_
 }
 
 
+vector<string> Symbol::GetAliases() const
+{
+	vector<string> result;
+	size_t count = 0;
+	char** aliases = BNGetSymbolAliases(m_object, &count);
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+		result.push_back(aliases[i]);
+
+	BNFreeStringList(aliases, count);
+	return result;
+}
+
+
 AnalysisCompletionEvent::AnalysisCompletionEvent(BinaryView* view, const std::function<void()>& callback):
 	m_callback(callback)
 {
@@ -286,6 +339,230 @@ void AnalysisCompletionEvent::Cancel()
 {
 	unique_lock<recursive_mutex> lock(m_mutex);
 	m_callback = []() {};
+}
+
+
+TagType::TagType(BNTagType* tagType)
+{
+	m_object = tagType;
+}
+
+
+TagType::TagType(BinaryView* view)
+{
+	m_object = BNCreateTagType(view->GetObject());
+}
+
+
+TagType::TagType(BinaryView* view, const std::string& name, const std::string& icon, bool visible, TagType::Type type)
+{
+	m_object = BNCreateTagType(view->GetObject());
+	SetName(name);
+	SetIcon(icon);
+	SetVisible(visible);
+	SetType(type);
+}
+
+
+BinaryView* TagType::GetView() const
+{
+	return new BinaryView(BNTagTypeGetView(m_object));
+}
+
+
+std::string TagType::GetName() const
+{
+	return BNTagTypeGetName(m_object);
+}
+
+
+void TagType::SetName(const std::string& name)
+{
+	BNTagTypeSetName(m_object, name.c_str());
+}
+
+
+std::string TagType::GetIcon() const
+{
+	return BNTagTypeGetIcon(m_object);
+}
+
+
+void TagType::SetIcon(const std::string& icon)
+{
+	BNTagTypeSetIcon(m_object, icon.c_str());
+}
+
+
+bool TagType::GetVisible() const
+{
+	return BNTagTypeGetVisible(m_object);
+}
+
+
+void TagType::SetVisible(bool visible)
+{
+	BNTagTypeSetVisible(m_object, visible);
+}
+
+
+TagType::Type TagType::GetType() const
+{
+	return BNTagTypeGetType(m_object);
+}
+
+
+void TagType::SetType(TagType::Type type)
+{
+	BNTagTypeSetType(m_object, type);
+}
+
+
+Tag::Tag(BNTag* tag)
+{
+	m_object = tag;
+}
+
+
+Tag::Tag(Ref<TagType> type, const std::string& data)
+{
+	m_object = BNCreateTag(type->GetObject(), data.c_str());
+}
+
+
+Ref<TagType> Tag::GetType() const
+{
+	return new TagType(BNTagGetType(m_object));
+}
+
+
+std::string Tag::GetData() const
+{
+	return BNTagGetData(m_object);
+}
+
+
+void Tag::SetData(const std::string& data)
+{
+	BNTagSetData(m_object, data.c_str());
+}
+
+
+BNTag** Tag::CreateTagList(const std::vector<Ref<Tag>>& tags, size_t* count)
+{
+	*count = tags.size();
+	BNTag** result = new BNTag*[tags.size()];
+	for (size_t i = 0; i < tags.size(); i++)
+		result[i] = tags[i]->GetObject();
+	return result;
+}
+
+
+std::vector<Ref<Tag>> Tag::ConvertTagList(BNTag** tags, size_t count)
+{
+	std::vector<Ref<Tag>> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+		result.emplace_back(new Tag(BNNewTagReference(tags[i])));
+	return result;
+}
+
+
+std::vector<Ref<Tag>> Tag::ConvertAndFreeTagList(BNTag** tags, size_t count)
+{
+	auto result = ConvertTagList(tags, count);
+	BNFreeTagList(tags, count);
+	return result;
+}
+
+
+TagReference::TagReference()
+{
+}
+
+
+TagReference::TagReference(const BNTagReference& ref)
+{
+	refType = ref.refType;
+	autoDefined = ref.autoDefined;
+	tag = ref.tag ? new Tag(BNNewTagReference(ref.tag)) : nullptr;
+	arch = ref.arch ? new CoreArchitecture(ref.arch) : nullptr;
+	func = ref.func ? new Function(BNNewFunctionReference(ref.func)) : nullptr;
+	addr = ref.addr;
+}
+
+
+bool TagReference::operator==(const TagReference& other) const
+{
+	if (refType != other.refType)
+		return false;
+	if (autoDefined != other.autoDefined)
+		return false;
+	if (tag != other.tag)
+		return false;
+	switch (refType)
+	{
+		case AddressTagReference:
+			return func == other.func && arch == other.arch && addr == other.addr;
+		case FunctionTagReference:
+			return func == other.func;
+		case DataTagReference:
+			return addr == other.addr;
+	}
+}
+
+
+bool TagReference::operator!=(const TagReference& other) const
+{
+	return !((*this) == other);
+}
+
+
+TagReference::operator BNTagReference() const
+{
+	BNTagReference ret;
+	ret.refType = refType;
+	ret.autoDefined = autoDefined;
+	ret.tag = tag->GetObject();
+	ret.arch = arch ? arch->GetObject() : nullptr;
+	ret.func = func ? func->GetObject() : nullptr;
+	ret.addr = addr;
+	return ret;
+}
+
+
+BNTagReference* TagReference::CreateTagReferenceList(const std::vector<TagReference>& tags, size_t* count)
+{
+	*count = tags.size();
+
+	BNTagReference* refs = new BNTagReference[*count];
+
+	for (size_t i = 0; i < *count; i ++)
+	{
+		refs[i] = tags[i];
+	}
+
+	return refs;
+}
+
+
+std::vector<TagReference> TagReference::ConvertTagReferenceList(BNTagReference* tags, size_t count)
+{
+	std::vector<TagReference> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i ++)
+	{
+		result.emplace_back(tags[i]);
+	}
+	return result;
+}
+
+
+std::vector<TagReference> TagReference::ConvertAndFreeTagReferenceList(BNTagReference* tags, size_t count)
+{
+	auto result = ConvertTagReferenceList(tags, count);
+	BNFreeTagReferences(tags, count);
+	return result;
 }
 
 
@@ -479,6 +756,8 @@ BinaryView::BinaryView(const std::string& typeName, FileMetadata* file, BinaryVi
 	view.context = this;
 	view.init = InitCallback;
 	view.freeObject = FreeCallback;
+	view.externalRefTaken = nullptr;
+	view.externalRefReleased = nullptr;
 	view.read = ReadCallback;
 	view.write = WriteCallback;
 	view.insert = InsertCallback;
@@ -1317,6 +1596,18 @@ bool BinaryView::HasFunctions() const
 }
 
 
+bool BinaryView::HasSymbols() const
+{
+	return BNHasSymbols(m_object);
+}
+
+
+bool BinaryView::HasDataVariables() const
+{
+	return BNHasDataVariables(m_object);
+}
+
+
 Ref<Function> BinaryView::GetAnalysisFunction(Platform* platform, uint64_t addr)
 {
 	BNFunction* func = BNGetAnalysisFunction(m_object, platform->GetObject(), addr);
@@ -1440,6 +1731,28 @@ vector<ReferenceSource> BinaryView::GetCodeReferences(uint64_t addr, uint64_t le
 }
 
 
+vector<uint64_t> BinaryView::GetCodeReferencesFrom(ReferenceSource src)
+{
+	size_t count;
+	BNReferenceSource _src{ src.func->m_object, src.arch->m_object, src.addr };
+	uint64_t* refs = BNGetCodeReferencesFrom(m_object, &_src, &count);
+	vector<uint64_t> result(refs, &refs[count]);
+	BNFreeAddressList(refs);
+	return result;
+}
+
+
+vector<uint64_t> BinaryView::GetCodeReferencesFrom(ReferenceSource src, uint64_t len)
+{
+	size_t count;
+	BNReferenceSource _src{ src.func->m_object, src.arch->m_object, src.addr };
+	uint64_t* refs = BNGetCodeReferencesFromInRange(m_object, &_src, len, &count);
+	vector<uint64_t> result(refs, &refs[count]);
+	BNFreeAddressList(refs);
+	return result;
+}
+
+
 vector<uint64_t> BinaryView::GetDataReferences(uint64_t addr)
 {
 	size_t count;
@@ -1476,6 +1789,50 @@ vector<uint64_t> BinaryView::GetDataReferencesFrom(uint64_t addr, uint64_t len)
 	uint64_t* refs = BNGetDataReferencesFromInRange(m_object, addr, len, &count);
 	vector<uint64_t> result(refs, &refs[count]);
 	BNFreeDataReferences(refs);
+	return result;
+}
+
+
+void BinaryView::AddUserDataReference(uint64_t fromAddr, uint64_t toAddr)
+{
+	BNAddUserDataReference(m_object, fromAddr, toAddr);
+}
+
+
+void BinaryView::RemoveUserDataReference(uint64_t fromAddr, uint64_t toAddr)
+{
+	BNRemoveUserDataReference(m_object, fromAddr, toAddr);
+}
+
+
+vector<uint64_t> BinaryView::GetCallees(ReferenceSource callSite)
+{
+	size_t count;
+	BNReferenceSource src { callSite.func->m_object, callSite.arch->m_object, callSite.addr };
+	uint64_t* refs = BNGetCallees(m_object, &src, &count);
+	vector<uint64_t> result(refs, &refs[count]);
+	BNFreeAddressList(refs);
+	return result;
+}
+
+
+vector<ReferenceSource> BinaryView::GetCallers(uint64_t addr)
+{
+	size_t count;
+	BNReferenceSource* refs = BNGetCallers(m_object, addr, &count);
+
+	vector<ReferenceSource> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+	{
+		ReferenceSource src;
+		src.func = new Function(BNNewFunctionReference(refs[i].func));
+		src.arch = new CoreArchitecture(refs[i].arch);
+		src.addr = refs[i].addr;
+		result.push_back(src);
+	}
+
+	BNFreeCodeReferences(refs, count);
 	return result;
 }
 
@@ -1587,6 +1944,23 @@ vector<Ref<Symbol>> BinaryView::GetSymbolsOfType(BNSymbolType type, uint64_t sta
 }
 
 
+std::vector<Ref<Symbol>> BinaryView::GetVisibleSymbols(const NameSpace& nameSpace)
+{
+	size_t count;
+	BNNameSpace ns = nameSpace.GetAPIObject();
+	BNSymbol** syms = BNGetVisibleSymbols(m_object, &count, &ns);
+	NameSpace::FreeAPIObject(&ns);
+
+	vector<Ref<Symbol>> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+		result.push_back(new Symbol(BNNewSymbolReference(syms[i])));
+
+	BNFreeSymbolList(syms, count);
+	return result;
+}
+
+
 void BinaryView::DefineAutoSymbol(Ref<Symbol> sym)
 {
 	BNDefineAutoSymbol(m_object, sym->GetObject());
@@ -1621,6 +1995,239 @@ void BinaryView::UndefineUserSymbol(Ref<Symbol> sym)
 void BinaryView::DefineImportedFunction(Ref<Symbol> importAddressSym, Ref<Function> func)
 {
 	BNDefineImportedFunction(m_object, importAddressSym->GetObject(), func->GetObject());
+}
+
+
+void BinaryView::AddTagType(Ref<TagType> tagType)
+{
+	BNAddTagType(m_object, tagType->GetObject());
+}
+
+
+void BinaryView::RemoveTagType(Ref<TagType> tagType)
+{
+	BNRemoveTagType(m_object, tagType->GetObject());
+}
+
+
+Ref<TagType> BinaryView::GetTagType(const std::string& name)
+{
+	BNTagType* tagType = BNGetTagType(m_object, name.c_str());
+	if (!tagType)
+		return nullptr;
+
+	return Ref<TagType>(new TagType(tagType));
+}
+
+
+Ref<TagType> BinaryView::GetTagType(const std::string& name, TagType::Type type)
+{
+	BNTagType* tagType = BNGetTagTypeWithType(m_object, name.c_str(), type);
+	if (!tagType)
+		return nullptr;
+
+	return Ref<TagType>(new TagType(tagType));
+}
+
+
+std::vector<Ref<TagType>> BinaryView::GetTagTypes()
+{
+	size_t count;
+	BNTagType** tagTypes = BNGetTagTypes(m_object, &count);
+
+	std::vector<Ref<TagType>> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i ++)
+	{
+		result.push_back(new TagType(BNNewTagTypeReference(tagTypes[i])));
+	}
+	BNFreeTagTypeList(tagTypes, count);
+
+	return result;
+}
+
+
+void BinaryView::AddTag(Ref<Tag> tag)
+{
+	BNAddTag(m_object, tag->GetObject());
+}
+
+
+void BinaryView::RemoveTag(Ref<Tag> tag)
+{
+	BNRemoveTag(m_object, tag->GetObject());
+}
+
+
+Ref<Tag> BinaryView::GetTag(uint64_t tagId)
+{
+	BNTag* tag = BNGetTag(m_object, tagId);
+	if (!tag)
+		return nullptr;
+
+	return Ref<Tag>(new Tag(tag));
+}
+
+
+std::vector<TagReference> BinaryView::GetAllTagReferences()
+{
+	size_t count;
+	BNTagReference* refs = BNGetAllTagReferences(m_object, &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<TagReference> BinaryView::GetAllAddressTagReferences()
+{
+	size_t count;
+	BNTagReference* refs = BNGetAllAddressTagReferences(m_object, &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<TagReference> BinaryView::GetAllFunctionTagReferences()
+{
+	size_t count;
+	BNTagReference* refs = BNGetAllFunctionTagReferences(m_object, &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<TagReference> BinaryView::GetAllTagReferencesOfType(Ref<TagType> tagType)
+{
+	size_t count;
+	BNTagReference* refs = BNGetAllTagReferencesOfType(m_object, tagType->GetObject(), &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<TagReference> BinaryView::GetTagReferencesOfType(Ref<TagType> tagType)
+{
+	size_t count;
+	BNTagReference* refs = BNGetTagReferencesOfType(m_object, tagType->GetObject(), &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<TagReference> BinaryView::GetDataTagReferences()
+{
+	size_t count;
+	BNTagReference* refs = BNGetDataTagReferences(m_object, &count);
+	return TagReference::ConvertAndFreeTagReferenceList(refs, count);
+}
+
+
+std::vector<Ref<Tag>> BinaryView::GetDataTags(uint64_t addr)
+{
+	size_t count;
+	BNTag** tags = BNGetDataTags(m_object, addr, &count);
+	return Tag::ConvertAndFreeTagList(tags, count);
+}
+
+
+std::vector<Ref<Tag>> BinaryView::GetDataTagsOfType(uint64_t addr, Ref<TagType> tagType)
+{
+	size_t count;
+	BNTag** tags = BNGetDataTagsOfType(m_object, addr, tagType->GetObject(), &count);
+	return Tag::ConvertAndFreeTagList(tags, count);
+}
+
+
+std::vector<Ref<Tag>> BinaryView::GetDataTagsInRange(uint64_t start, uint64_t end)
+{
+	size_t count;
+	BNTag** tags = BNGetDataTagsInRange(m_object, start, end, &count);
+	return Tag::ConvertAndFreeTagList(tags, count);
+}
+
+
+void BinaryView::AddAutoDataTag(uint64_t addr, Ref<Tag> tag)
+{
+	BNAddAutoDataTag(m_object, addr, tag->GetObject());
+}
+
+
+void BinaryView::RemoveAutoDataTag(uint64_t addr, Ref<Tag> tag)
+{
+	BNRemoveAutoDataTag(m_object, addr, tag->GetObject());
+}
+
+
+void BinaryView::AddUserDataTag(uint64_t addr, Ref<Tag> tag)
+{
+	BNAddUserDataTag(m_object, addr, tag->GetObject());
+}
+
+
+void BinaryView::RemoveUserDataTag(uint64_t addr, Ref<Tag> tag)
+{
+	BNRemoveUserDataTag(m_object, addr, tag->GetObject());
+}
+
+
+void BinaryView::RemoveTagReference(const TagReference& ref)
+{
+	BNRemoveTagReference(m_object, (BNTagReference)ref);
+}
+
+
+Ref<Tag> BinaryView::CreateAutoDataTag(uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique)
+{
+	Ref<TagType> tagType = GetTagType(tagTypeName);
+	if (!tagType)
+		return nullptr;
+
+	return CreateAutoDataTag(addr, tagType, data, unique);
+}
+
+
+Ref<Tag> BinaryView::CreateUserDataTag(uint64_t addr, const std::string& tagTypeName, const std::string& data, bool unique)
+{
+	Ref<TagType> tagType = GetTagType(tagTypeName);
+	if (!tagType)
+		return nullptr;
+
+	return CreateUserDataTag(addr, tagType, data, unique);
+}
+
+
+Ref<Tag> BinaryView::CreateAutoDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique)
+{
+	if (unique)
+	{
+		auto tags = GetDataTags(addr);
+		for (const auto& tag : tags)
+		{
+			if (tag->GetType() == tagType && tag->GetData() == data)
+				return nullptr;
+		}
+	}
+
+	Ref<Tag> tag = new Tag(tagType, data);
+	AddTag(tag);
+
+	AddAutoDataTag(addr, tag);
+	return tag;
+}
+
+
+Ref<Tag> BinaryView::CreateUserDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique)
+{
+	if (unique)
+	{
+		auto tags = GetDataTags(addr);
+		for (const auto& tag : tags)
+		{
+			if (tag->GetType() == tagType && tag->GetData() == data)
+				return nullptr;
+		}
+	}
+
+	Ref<Tag> tag = new Tag(tagType, data);
+	AddTag(tag);
+
+	AddUserDataTag(addr, tag);
+	return tag;
 }
 
 
@@ -1824,6 +2431,7 @@ vector<LinearDisassemblyLine> BinaryView::GetPreviousLinearDisassemblyLines(Line
 		line.contents.instrIndex = lines[i].contents.instrIndex;
 		line.contents.highlight = lines[i].contents.highlight;
 		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
+		line.contents.tags = Tag::ConvertTagList(lines[i].contents.tags, lines[i].contents.tagCount);
 		result.push_back(line);
 	}
 
@@ -1861,6 +2469,7 @@ vector<LinearDisassemblyLine> BinaryView::GetNextLinearDisassemblyLines(LinearDi
 		line.contents.instrIndex = lines[i].contents.instrIndex;
 		line.contents.highlight = lines[i].contents.highlight;
 		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
+		line.contents.tags = Tag::ConvertTagList(lines[i].contents.tags, lines[i].contents.tagCount);
 		result.push_back(line);
 	}
 
@@ -1959,7 +2568,7 @@ Ref<Type> BinaryView::GetTypeByName(const QualifiedName& name)
 
 	if (!type)
 		return nullptr;
-	return new Type(type);
+	return new Type(BNNewTypeReference(type));
 }
 
 
@@ -2297,6 +2906,32 @@ vector<string> BinaryView::GetUniqueSectionNames(const vector<string>& names)
 }
 
 
+string BinaryView::GetCommentForAddress(uint64_t addr) const
+{
+	char* comment = BNGetGlobalCommentForAddress(m_object, addr);
+	string result = comment;
+	BNFreeString(comment);
+	return result;
+}
+
+
+vector<uint64_t> BinaryView::GetCommentedAddresses() const
+{
+	size_t count;
+	uint64_t* addrs = BNGetGlobalCommentedAddresses(m_object, &count);
+	vector<uint64_t> result;
+	result.insert(result.end(), addrs, &addrs[count]);
+	BNFreeAddressList(addrs);
+	return result;
+}
+
+
+void BinaryView::SetCommentForAddress(uint64_t addr, const string& comment)
+{
+	BNSetGlobalCommentForAddress(m_object, addr, comment.c_str());
+}
+
+
 vector<BNAddressRange> BinaryView::GetAllocatedRanges()
 {
 	size_t count;
@@ -2316,6 +2951,7 @@ void BinaryView::StoreMetadata(const std::string& key, Ref<Metadata> inValue)
 	BNBinaryViewStoreMetadata(m_object, key.c_str(), inValue->GetObject());
 }
 
+
 Ref<Metadata> BinaryView::QueryMetadata(const std::string& key)
 {
 	BNMetadata* value = BNBinaryViewQueryMetadata(m_object, key.c_str());
@@ -2324,10 +2960,12 @@ Ref<Metadata> BinaryView::QueryMetadata(const std::string& key)
 	return new Metadata(value);
 }
 
+
 void BinaryView::RemoveMetadata(const std::string& key)
 {
 	BNBinaryViewRemoveMetadata(m_object, key.c_str());
 }
+
 
 string BinaryView::GetStringMetadata(const string& key)
 {
@@ -2337,6 +2975,7 @@ string BinaryView::GetStringMetadata(const string& key)
 	return data->GetString();
 }
 
+
 vector<uint8_t> BinaryView::GetRawMetadata(const string& key)
 {
 	auto data = QueryMetadata(key);
@@ -2345,12 +2984,28 @@ vector<uint8_t> BinaryView::GetRawMetadata(const string& key)
 	return data->GetRaw();
 }
 
+
 uint64_t BinaryView::GetUIntMetadata(const string& key)
 {
 	auto data = QueryMetadata(key);
 	if (!data || !data->IsUnsignedInteger())
 		throw QueryMetadataException("Failed to find key: " + key);
 	return data->GetUnsignedInteger();
+}
+
+
+Ref<Settings> BinaryView::GetLoadSettings(const string& typeName)
+{
+	BNSettings* settings = BNBinaryViewGetLoadSettings(m_object, typeName.c_str());
+	if (!settings)
+		return nullptr;
+	return new Settings(settings);
+}
+
+
+void BinaryView::SetLoadSettings(const string& typeName, Ref<Settings> settings)
+{
+	BNBinaryViewSetLoadSettings(m_object, typeName.c_str(), settings->GetObject());
 }
 
 

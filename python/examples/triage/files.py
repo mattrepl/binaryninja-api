@@ -70,7 +70,6 @@ class TriageFilePicker(QWidget):
 					failedToOpen.append(filename)
 					continue
 
-				f.createBinaryViews()
 				for data in f.getAllDataViews():
 					Settings().set_string("analysis.mode", Settings().get_string("triage.analysisMode"), data)
 					Settings().set_bool("triage.preferSummaryView", True, data)
@@ -131,6 +130,15 @@ Settings().register_setting("triage.linearSweep", """
 			"Do not perform linear sweep of the binary.",
 			"Perform linear sweep on the binary, but skip the control flow graph analysis phase.",
 			"Perform full linear sweep on the binary." ]
+	}
+	""")
+
+Settings().register_setting("triage.hiddenFiles", """
+	{
+		"title" : "Triage Shows Hidden Files",
+		"type" : "boolean",
+		"default" : false,
+		"description" : "Whether the Triage file picker shows hidden files."
 	}
 	""")
 

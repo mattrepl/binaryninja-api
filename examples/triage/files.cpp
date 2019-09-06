@@ -11,9 +11,13 @@ TriageFilePicker::TriageFilePicker(UIContext* context): m_contextMenuManager(thi
 
 	QVBoxLayout* layout = new QVBoxLayout();
 	layout->setContentsMargins(0, 0, 0, 0);
+	SettingsRef settings = BinaryNinja::Settings::Instance();
+	bool hiddenFiles = settings->Get<bool>("triage.hiddenFiles");
 
 	m_model = new QFileSystemModel();
 	m_model->setRootPath("");
+	if (hiddenFiles)
+		m_model->setFilter(QDir::Hidden | QDir::AllEntries | QDir::System );
 	m_tree = new QTreeView(this);
 	m_tree->setModel(m_model);
 	m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -63,6 +67,7 @@ void TriageFilePicker::openSelectedFiles()
 {
 	std::vector<QString> failedToOpen;
 	std::set<QString> files;
+	SettingsRef settings = BinaryNinja::Settings::Instance();
 
 	for (auto& index: m_tree->selectionModel()->selectedIndexes())
 		if (m_model->fileInfo(index).isFile())
@@ -79,27 +84,26 @@ void TriageFilePicker::openSelectedFiles()
 			continue;
 		}
 
-		f->createBinaryViews();
 		for (auto data: f->getAllDataViews())
 		{
-			BinaryNinja::Settings().Set("analysis.mode", BinaryNinja::Settings().Get<std::string>("triage.analysis_mode"), data);
-			BinaryNinja::Settings().Set("triage.always_prefer", true, data);
+			settings->Set("analysis.mode", settings->Get<std::string>("triage.analysisMode"), data);
+			settings->Set("triage.preferSummaryView", true, data);
 			if (data->GetTypeName() != "Raw")
 			{
-				std::string linearSweepMode = BinaryNinja::Settings().Get<std::string>("triage.linear_sweep");
+				std::string linearSweepMode = settings->Get<std::string>("triage.linearSweep");
 				if (linearSweepMode == "none")
 				{
-					BinaryNinja::Settings().Set("analysis.linearSweep.autorun", false, data);
+					settings->Set("analysis.linearSweep.autorun", false, data);
 				}
 				else if (linearSweepMode == "partial")
 				{
-					BinaryNinja::Settings().Set("analysis.linearSweep.autorun", true, data);
-					BinaryNinja::Settings().Set("analysis.linearSweep.controlFlowGraph", false, data);
+					settings->Set("analysis.linearSweep.autorun", true, data);
+					settings->Set("analysis.linearSweep.controlFlowGraph", false, data);
 				}
 				else if (linearSweepMode == "full")
 				{
-					BinaryNinja::Settings().Set("analysis.linearSweep.autorun", true, data);
-					BinaryNinja::Settings().Set("analysis.linearSweep.controlFlowGraph", true, data);
+					settings->Set("analysis.linearSweep.autorun", true, data);
+					settings->Set("analysis.linearSweep.controlFlowGraph", true, data);
 				}
 			}
 		}

@@ -38,7 +38,8 @@ from binaryninja import callingconvention
 # 2-3 compatibility
 from binaryninja import range
 from binaryninja import with_metaclass
-from binaryninja import long
+import numbers
+
 
 class _ArchitectureMetaClass(type):
 
@@ -1056,15 +1057,23 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			log.log_error(traceback.format_exc())
 
 	def _assemble(self, ctxt, code, addr, result, errors):
+		"""
+		This function calls the `assemble` command for the actual architecture plugin.
+		If the plugin does not provide an `assemble(self, code, addr)`-style function,
+		it uses the default function provided in CoreArchitecture.
+		"""
 		try:
-			data, error_str = self.assemble(code, addr)
-			errors[0] = core.BNAllocString(str(error_str))
+			data = self.assemble(code, addr)
 			if data is None:
 				return False
 			buf = ctypes.create_string_buffer(len(data))
 			ctypes.memmove(buf, data, len(data))
 			core.BNSetDataBufferContents(result, buf, len(data))
 			return True
+		except ValueError as e:  # Overriden `assemble` functions should raise a ValueError if the input was invalid (with a reasonable error message)
+			log.log_error(traceback.format_exc())
+			errors[0] = core.BNAllocString(str(e))
+			return False
 		except:
 			log.log_error(traceback.format_exc())
 			errors[0] = core.BNAllocString("Unhandled exception during assembly.\n")
@@ -1122,7 +1131,6 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			result = self.convert_to_nop(buf.raw, addr)
 			if result is None:
 				return False
-			result = str(result)
 			if len(result) > length:
 				result = result[0:length]
 			ctypes.memmove(data, result, len(result))
@@ -1138,7 +1146,6 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			result = self.always_branch(buf.raw, addr)
 			if result is None:
 				return False
-			result = str(result)
 			if len(result) > length:
 				result = result[0:length]
 			ctypes.memmove(data, result, len(result))
@@ -1154,7 +1161,6 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			result = self.invert_branch(buf.raw, addr)
 			if result is None:
 				return False
-			result = str(result)
 			if len(result) > length:
 				result = result[0:length]
 			ctypes.memmove(data, result, len(result))
@@ -1170,7 +1176,6 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			result = self.skip_and_return_value(buf.raw, addr, value)
 			if result is None:
 				return False
-			result = str(result)
 			if len(result) > length:
 				result = result[0:length]
 			ctypes.memmove(data, result, len(result))
@@ -1181,14 +1186,14 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 
 	def perform_get_associated_arch_by_address(self, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_associated_arch_by_address``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_associated_arch_by_address`.
 		"""
 		return self, addr
 
 	@abc.abstractmethod
 	def perform_get_instruction_info(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_instruction_info``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_instruction_info`.
 
 		:param str data: bytes to decode
 		:param int addr: virtual address of the byte to be decoded
@@ -1200,7 +1205,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_get_instruction_text(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_instruction_text``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_instruction_text`.
 
 		:param str data: bytes to decode
 		:param int addr: virtual address of the byte to be decoded
@@ -1212,7 +1217,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_get_instruction_low_level_il(self, data, addr, il):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_instruction_low_level_il``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_instruction_low_level_il`.
 
 		:param str data: bytes to be interpreted as low-level IL instructions
 		:param int addr: virtual address of start of ``data``
@@ -1224,7 +1229,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_get_flag_write_low_level_il(self, op, size, write_type, flag, operands, il):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_flag_write_low_level_il``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_flag_write_low_level_il`.
 
 		:param LowLevelILOperation op:
 		:param int size:
@@ -1242,7 +1247,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_get_flag_condition_low_level_il(self, cond, sem_class, il):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_flag_condition_low_level_il``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_flag_condition_low_level_il`.
 
 		:param LowLevelILFlagCondition cond: Flag condition to be computed
 		:param str sem_class: Semantic class to be used (None for default semantics)
@@ -1254,7 +1259,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_get_semantic_flag_group_low_level_il(self, sem_group, il):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_semantic_flag_group_low_level_il``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_semantic_flag_group_low_level_il`.
 
 		:param str sem_group: Semantic group to be computed
 		:param LowLevelILFunction il: LowLevelILFunction object to append LowLevelILExpr objects to
@@ -1265,21 +1270,22 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_assemble(self, code, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``assemble``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`assemble`.
 
 		:param str code: string representation of the instructions to be assembled
 		:param int addr: virtual address that the instructions will be loaded at
 		:return: the bytes for the assembled instructions or error string
 		:rtype: (a tuple of instructions and empty string) or (or None and error string)
 		"""
-		return None, "Architecture does not implement an assembler.\n"
+		raise NotImplementedError("Architecture does not implement an assembler.\n")
 
 	@abc.abstractmethod
 	def perform_is_never_branch_patch_available(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``is_never_branch_patch_available``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`is_never_branch_patch_available`.
 
 		.. note:: Architecture subclasses should implement this method.
+
 		.. warning:: This method should never be called directly.
 
 		:param str data: bytes to be checked
@@ -1292,7 +1298,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_is_always_branch_patch_available(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``is_always_branch_patch_available``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`is_always_branch_patch_available`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1304,7 +1310,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_is_invert_branch_patch_available(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``is_invert_branch_patch_available``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`is_invert_branch_patch_available`.
 
 		:param int addr: the virtual address of the instruction to be patched
 		:return: True if the instruction can be patched, False otherwise
@@ -1315,7 +1321,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_is_skip_and_return_zero_patch_available(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``is_skip_and_return_zero_patch_available``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`is_skip_and_return_zero_patch_available`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1327,7 +1333,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_is_skip_and_return_value_patch_available(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``is_skip_and_return_value_patch_available``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`is_skip_and_return_value_patch_available`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1339,7 +1345,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_convert_to_nop(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``convert_to_nop``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`convert_to_nop`.
 
 		:param str data: bytes at virtual address ``addr``
 		:param int addr: the virtual address of the instruction to be patched
@@ -1351,7 +1357,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_always_branch(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``always_branch``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`always_branch`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1363,7 +1369,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_invert_branch(self, data, addr):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``invert_branch``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`invert_branch`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1375,7 +1381,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	@abc.abstractmethod
 	def perform_skip_and_return_value(self, data, addr, value):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``skip_and_return_value``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`skip_and_return_value`.
 
 		:param str data: bytes to be checked
 		:param int addr: the virtual address of the instruction to be patched
@@ -1387,7 +1393,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 
 	def perform_get_flag_role(self, flag, sem_class):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_flag_role``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_flag_role`.
 		"""
 		if flag in self._flag_roles:
 			return self._flag_roles[flag]
@@ -1395,7 +1401,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 
 	def perform_get_flags_required_for_flag_condition(self, cond, sem_class):
 		"""
-		Deprecated method provided for compatibility. Architecture plugins should override ``get_flags_required_for_flag_condition``.
+		Deprecated method provided for compatibility. Architecture plugins should override :func:`get_flags_required_for_flag_condition`.
 		"""
 		if cond in self.flags_required_for_flag_condition:
 			return self.flags_required_for_flag_condition[cond]
@@ -1411,7 +1417,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 
 		.. note:: Architecture subclasses should implement this method.
 
-		.. note :: The instruction info object should always set the InstructionInfo.length to the instruction length, \
+		.. note:: The instruction info object should always set the InstructionInfo.length to the instruction length, \
 		and the branches of the proper types should be added if the instruction is a branch.
 
 		If the instruction is a branch instruction architecture plugins should add a branch of the proper type:
@@ -1462,7 +1468,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		virtual address ``addr`` with data ``data``.
 
 		This is used to analyze arbitrary data at an address, if you are working with an existing binary, you likely
-		want to be using ``Function.get_low_level_il_at``.
+		want to be using :func:`Function.get_low_level_il_at`.
 
 		.. note:: Architecture subclasses should implement this method.
 
@@ -1567,7 +1573,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		:return: the name of the semantic flag class
 		:rtype: str
 		"""
-		if not isinstance(class_index, (int, long)):
+		if not isinstance(class_index, numbers.Integral):
 			raise ValueError("argument 'class_index' must be an integer")
 		try:
 			return self._semantic_flag_classes_by_index[class_index]
@@ -1589,7 +1595,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		:return: the name of the semantic flag group
 		:rtype: str
 		"""
-		if not isinstance(group_index, (int, long)):
+		if not isinstance(group_index, numbers.Integral):
 			raise ValueError("argument 'group_index' must be an integer")
 		try:
 			return self._semantic_flag_groups_by_index[group_index]
@@ -1767,8 +1773,10 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		Architecture plugins can override this method to provide assembler functionality. This can be done by
 		simply shelling out to an assembler like yasm or llvm-mc, since this method isn't performance sensitive.
 
-		.. note :: It is important that the assembler used accepts a syntax identical to the one emitted by the \
+		.. note:: It is important that the assembler used accepts a syntax identical to the one emitted by the \
 		disassembler. This will prevent confusing the user.
+
+		If there is an error in the input assembly, this function should raise a ValueError (with a reasonable error message).
 
 		:param str code: string representation of the instructions to be assembled
 		:param int addr: virtual address that the instructions will be loaded at
@@ -2273,7 +2281,7 @@ class CoreArchitecture(Architecture):
 		``get_instruction_info`` returns an InstructionInfo object for the instruction at the given virtual address
 		``addr`` with data ``data``.
 
-		.. note :: The instruction info object should always set the InstructionInfo.length to the instruction length, \
+		.. note:: The instruction info object should always set the InstructionInfo.length to the instruction length, \
 		and the branches of the proper types should be added if the instruction is a branch.
 
 		:param str data: max_instruction_length bytes from the binary at virtual address ``addr``
@@ -2332,7 +2340,7 @@ class CoreArchitecture(Architecture):
 		virtual address ``addr`` with data ``data``.
 
 		This is used to analyze arbitrary data at an address, if you are working with an existing binary, you likely
-		want to be using ``Function.get_low_level_il_at``.
+		want to be using :func:`Function.get_low_level_il_at`.
 
 		:param str data: max_instruction_length bytes from the binary at virtual address ``addr``
 		:param int addr: virtual address of bytes in ``data``
@@ -2412,7 +2420,7 @@ class CoreArchitecture(Architecture):
 		if not core.BNAssemble(self.handle, code, addr, result.handle, errors):
 			error_str = errors.value
 			core.BNFreeString(ctypes.cast(errors, ctypes.POINTER(ctypes.c_byte)))
-			raise ValueError("Could not assemble: %s" % errors.value)
+			raise ValueError("Could not assemble: %s" % error_str)
 		if isinstance(str(result), bytes):
 			return str(result)
 		else:
@@ -2648,7 +2656,7 @@ class CoreArchitecture(Architecture):
 
 class ArchitectureHook(CoreArchitecture):
 	def __init__(self, base_arch):
-		self.base_arch = base_arch
+		self._base_arch = base_arch
 		super(ArchitectureHook, self).__init__(base_arch.handle)
 
 		# To improve performance of simpler hooks, use null callback for functions that are not being overridden
@@ -2677,17 +2685,53 @@ class ArchitectureHook(CoreArchitecture):
 
 	def register(self):
 		self.__class__._registered_cb = self._cb
-		self.handle = core.BNRegisterArchitectureHook(self.base_arch.handle, self._cb)
+		self.handle = core.BNRegisterArchitectureHook(self._base_arch.handle, self._cb)
+
+	@property
+	def base_arch(self):
+		""" """
+		return self._base_arch
+
+	@base_arch.setter
+	def base_arch(self, value):
+		self._base_arch = value
 
 
 class ReferenceSource(object):
 	def __init__(self, func, arch, addr):
-		self.function = func
-		self.arch = arch
-		self.address = addr
+		self._function = func
+		self._arch = arch
+		self._address = addr
 
 	def __repr__(self):
-		if self.arch:
-			return "<ref: %s@%#x>" % (self.arch.name, self.address)
+		if self._arch:
+			return "<ref: %s@%#x>" % (self._arch.name, self._address)
 		else:
-			return "<ref: %#x>" % self.address
+			return "<ref: %#x>" % self._address
+
+	@property
+	def function(self):
+		""" """
+		return self._function
+
+	@function.setter
+	def function(self, value):
+		self._function = value
+
+	@property
+	def arch(self):
+		""" """
+		return self._arch
+
+	@arch.setter
+	def arch(self, value):
+		self._arch = value
+
+	@property
+	def address(self):
+		""" """
+		return self._address
+
+	@address.setter
+	def address(self, value):
+		self._address = value

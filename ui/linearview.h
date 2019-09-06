@@ -14,20 +14,32 @@
 #define MAX_STRING_TYPE_LENGTH 1048576
 #define EDGE_GUTTER_WIDTH 4
 
+struct BINARYNINJAUIAPI LinearViewCursorPosition: public BinaryNinja::LinearDisassemblyPosition
+{
+	uint64_t lineAddress;
+	size_t lineIndexForAddress;
+	size_t tokenIndex;
+
+	LinearViewCursorPosition();
+	LinearViewCursorPosition(const LinearViewCursorPosition& pos);
+	LinearViewCursorPosition(const BinaryNinja::LinearDisassemblyPosition& pos);
+};
+
 class BINARYNINJAUIAPI LinearViewHistoryEntry: public HistoryEntry
 {
-	BinaryNinja::LinearDisassemblyPosition m_topPosition, m_cursorPosition;
+	BinaryNinja::LinearDisassemblyPosition m_topPosition;
+	LinearViewCursorPosition m_cursorPosition;
 	size_t m_topLineOffset;
 	HighlightTokenState m_highlight;
 
 public:
 	const BinaryNinja::LinearDisassemblyPosition& getTopPosition() const { return m_topPosition; }
-	const BinaryNinja::LinearDisassemblyPosition& getCursorPosition() const { return m_cursorPosition; }
+	const LinearViewCursorPosition& getCursorPosition() const { return m_cursorPosition; }
 	size_t getTopLineOffset() const { return m_topLineOffset; }
 	const HighlightTokenState& getHighlightTokenState() const { return m_highlight; }
 
 	void setTopPosition(const BinaryNinja::LinearDisassemblyPosition& pos) { m_topPosition = pos; }
-	void setCursorPosition(const BinaryNinja::LinearDisassemblyPosition& pos) { m_cursorPosition = pos; }
+	void setCursorPosition(const LinearViewCursorPosition& pos) { m_cursorPosition = pos; }
 	void setTopLineOffset(size_t offset) { m_topLineOffset = offset; }
 	void setHighlightTokenState(const HighlightTokenState& state) { m_highlight = state; }
 };
@@ -73,9 +85,8 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	bool m_updatesRequired;
 	bool m_updateBounds, m_updateBlockRef;
 
-	BinaryNinja::LinearDisassemblyPosition m_cursorPosition;
-	bool m_cursorPositionHasOffset = false;
-	size_t m_cursorPositionOffset = 0;
+	LinearViewCursorPosition m_cursorPosition, m_selectionStartPos;
+	bool m_tokenSelection = false;
 	HighlightTokenState m_highlight;
 	uint64_t m_navByRefTarget;
 	bool m_navByRef = false;
@@ -112,6 +123,9 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 
 	void setSectionSemantics(const std::string& name, BNSectionSemantics semantics);
 
+	bool isLineValidHighlight(const BinaryNinja::LinearDisassemblyLine& line);
+	void ensureLineVisible(size_t line);
+
 private Q_SLOTS:
 	void viewInHexEditor();
 	void viewInGraph();
@@ -127,6 +141,12 @@ private Q_SLOTS:
 	void reanalyze();
 	void comment();
 	void commentAccepted();
+	void addUserXref();
+	void bookmarkAddress();
+	void unbookmarkAddress();
+	void tagAddress();
+	void tagAddressAccepted(TagTypeRef tt);
+	void manageAddressTags();
 
 	void convertToNop();
 	void alwaysBranch();
@@ -142,6 +162,7 @@ private Q_SLOTS:
 	void makePtr();
 	void makeString();
 	void changeType();
+	void inferStructureType();
 	size_t getStringLength(uint64_t startAddr);
 
 	void displayAsDefault();
@@ -170,6 +191,7 @@ public:
 	virtual bool canCompile() override { return true; }
 
 	virtual BinaryViewRef getData() override { return m_data; }
+	void getCurrentOffsetByType(TypeRef resType, uint64_t baseAddr, uint64_t& begin, uint64_t& end, bool singleLine);
 	virtual uint64_t getCurrentOffset() override;
 	virtual void getSelectionOffsets(uint64_t& begin, uint64_t& end) override;
 	virtual void getSelectionForInfo(uint64_t& begin, uint64_t& end) override;
@@ -190,6 +212,7 @@ public:
 	virtual void OnDataVariableAdded(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
 	virtual void OnDataVariableRemoved(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
 	virtual void OnDataVariableUpdated(BinaryNinja::BinaryView* view, const BinaryNinja::DataVariable& var) override;
+	virtual void OnDataMetadataUpdated(BinaryNinja::BinaryView* view, uint64_t offset) override;
 
 	virtual void updateFonts() override;
 
@@ -216,7 +239,21 @@ protected:
 	virtual void paintEvent(QPaintEvent* event) override;
 	virtual void wheelEvent(QWheelEvent* event) override;
 	virtual void mousePressEvent(QMouseEvent* event) override;
+	virtual void mouseMoveEvent(QMouseEvent* event) override;
 	virtual void mouseDoubleClickEvent(QMouseEvent* event) override;
+
+	void up(bool selecting, size_t count = 1);
+	void down(bool selecting, size_t count = 1);
+	void left(bool selecting);
+	void right(bool selecting);
+	void leftToSymbol(bool selecting);
+	void rightToSymbol(bool selecting);
+	void moveToStartOfLine(bool selecting);
+	void moveToEndOfLine(bool selecting);
+	void moveToStartOfView();
+	void moveToEndOfView();
+	void selectNone();
+	void navigateToHighlightedToken();
 };
 
 class LinearViewType: public ViewType

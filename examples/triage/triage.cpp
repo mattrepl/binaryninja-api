@@ -12,8 +12,9 @@ extern "C"
 	BINARYNINJAPLUGIN bool UIPluginInit()
 #endif
 	{
-		BinaryNinja::Settings().RegisterGroup("triage", "Triage");
-		BinaryNinja::Settings().RegisterSetting("triage.always_prefer",
+		SettingsRef settings = BinaryNinja::Settings::Instance();
+		settings->RegisterGroup("triage", "Triage");
+		settings->RegisterSetting("triage.preferSummaryView",
 			R"({
 				"title" : "Always Prefer Triage Summary View",
 				"type" : "boolean",
@@ -21,17 +22,17 @@ extern "C"
 				"description" : "Always prefer opening binaries in Triage Summary view, even when performing full analysis."
 			})");
 
-		BinaryNinja::Settings().RegisterSetting("triage.prefer_for_raw",
+		settings->RegisterSetting("triage.preferSummaryViewForRaw",
 			R"({
 				"title" : "Prefer Triage Summary View for Raw Files",
 				"type" : "boolean",
-				"default" : true,
+				"default" : false,
 				"description" : "Prefer opening raw files in Triage Summary view."
 			})");
 
 		ViewType::registerViewType(new TriageViewType());
 
-		BinaryNinja::Settings().RegisterSetting("triage.analysis_mode",
+		settings->RegisterSetting("triage.analysisMode",
 			R"({
 				"title" : "Triage Analysis Mode",
 				"type" : "string",
@@ -44,7 +45,7 @@ extern "C"
 					"Perform full analysis of the binary." ]
 			})");
 
-		BinaryNinja::Settings().RegisterSetting("triage.linear_sweep",
+		settings->RegisterSetting("triage.linearSweep",
 			R"({
 				"title" : "Triage Linear Sweep Mode",
 				"type" : "string",
@@ -55,6 +56,14 @@ extern "C"
 					"Do not perform linear sweep of the binary.",
 					"Perform linear sweep on the binary, but skip the control flow graph analysis phase.",
 					"Perform full linear sweep on the binary." ]
+			})");
+
+		settings->RegisterSetting("triage.hiddenFiles",
+			R"({
+				"title" : "Triage Shows Hidden Files",
+				"type" : "boolean",
+				"default" : false,
+				"description" : "Whether the Triage file picker shows hidden files."
 			})");
 
 		UIAction::registerAction("Open for Triage...", QKeySequence("Ctrl+Alt+O"));

@@ -70,7 +70,6 @@
 
 #define BN_INVALID_EXPR             ((size_t)-1)
 
-#define BN_DEFAULT_MIN_STRING_LENGTH 4
 #define BN_MAX_STRING_LENGTH         128
 
 #define LLVM_SVCS_CB_NOTE 0
@@ -136,6 +135,8 @@ extern "C"
 	struct BNMediumLevelILFunction;
 	struct BNType;
 	struct BNStructure;
+	struct BNTagType;
+	struct BNTag;
 	struct BNNamedTypeReference;
 	struct BNEnumeration;
 	struct BNCallingConvention;
@@ -149,6 +150,7 @@ extern "C"
 	struct BNRepository;
 	struct BNRepoPlugin;
 	struct BNRepositoryManager;
+	struct BNSettings;
 	struct BNMetadata;
 	struct BNReportCollection;
 	struct BNRelocation;
@@ -161,7 +163,7 @@ extern "C"
 	struct BNDataRendererContainer;
 	struct BNDisassemblyTextRenderer;
 
-	typedef bool (*BNLoadPluginCallback)(const char* repoPath, const char* pluginPath, void* ctx);
+	typedef bool (*BNLoadPluginCallback)(const char* repoPath, const char* pluginPath, bool force, void* ctx);
 
 	//! Console log levels
 	enum BNLogLevel
@@ -238,6 +240,8 @@ extern "C"
 		FieldNameToken = 21,
 		NameSpaceToken = 22,
 		NameSpaceSeparatorToken = 23,
+		TagToken = 24,
+		StructOffsetToken = 25,
 		// The following are output by the analysis system automatically, these should
 		// not be used directly by the architecture plugins
 		CodeSymbolToken = 64,
@@ -779,10 +783,18 @@ extern "C"
 		OtherPluginOrigin
 	};
 
-	enum BNPluginUpdateStatus
+	enum BNPluginStatus
 	{
-		UpToDatePluginStatus,
-		UpdatesAvailablePluginStatus
+		NotInstalledPluginStatus          = 0x00000000,
+		InstalledPluginStatus             = 0x00000001,
+		EnabledPluginStatus               = 0x00000002,
+		UpdateAvailablePluginStatus       = 0x00000010,
+		DeletePendingPluginStatus         = 0x00000020,
+		UpdatePendingPluginStatus         = 0x00000040,
+		DisablePendingPluginStatus        = 0x00000080,
+		PendingRestartPluginStatus        = 0x00000200,
+		BeingUpdatedPluginStatus          = 0x00000400,
+		BeingDeletedPluginStatus          = 0x00000800
 	};
 
 	enum BNPluginType
@@ -790,7 +802,8 @@ extern "C"
 		CorePluginType,
 		UiPluginType,
 		ArchitecturePluginType,
-		BinaryViewPluginType
+		BinaryViewPluginType,
+		HelperPluginType
 	};
 
 	struct BNLookupTableEntry
@@ -1064,6 +1077,10 @@ extern "C"
 		void (*dataVariableAdded)(void* ctxt, BNBinaryView* view, BNDataVariable* var);
 		void (*dataVariableRemoved)(void* ctxt, BNBinaryView* view, BNDataVariable* var);
 		void (*dataVariableUpdated)(void* ctxt, BNBinaryView* view, BNDataVariable* var);
+		void (*dataMetadataUpdated)(void* ctxt, BNBinaryView* view, uint64_t offset);
+		void (*symbolAdded)(void* ctxt, BNBinaryView* view, BNSymbol* sym);
+		void (*symbolUpdated)(void* ctxt, BNBinaryView* view, BNSymbol* sym);
+		void (*symbolRemoved)(void* ctxt, BNBinaryView* view, BNSymbol* sym);
 		void (*stringFound)(void* ctxt, BNBinaryView* view, BNStringType type, uint64_t offset, size_t len);
 		void (*stringRemoved)(void* ctxt, BNBinaryView* view, BNStringType type, uint64_t offset, size_t len);
 		void (*typeDefined)(void* ctxt, BNBinaryView* view, BNQualifiedName* name, BNType* type);
@@ -1083,6 +1100,8 @@ extern "C"
 		void* context;
 		bool (*init)(void* ctxt);
 		void (*freeObject)(void* ctxt);
+		void (*externalRefTaken)(void* ctxt);
+		void (*externalRefReleased)(void* ctxt);
 		size_t (*read)(void* ctxt, void* dest, uint64_t offset, size_t len);
 		size_t (*write)(void* ctxt, uint64_t offset, const void* src, size_t len);
 		size_t (*insert)(void* ctxt, uint64_t offset, const void* src, size_t len);
@@ -1109,6 +1128,7 @@ extern "C"
 		void* context;
 		BNBinaryView* (*create)(void* ctxt, BNBinaryView* data);
 		bool (*isValidForData)(void* ctxt, BNBinaryView* data);
+		BNSettings* (*getLoadSettingsForData)(void* ctxt, BNBinaryView* data);
 	};
 
 	struct BNTransformParameterInfo
@@ -1182,6 +1202,7 @@ extern "C"
 		BNInstructionTextTokenType type;
 		char* text;
 		uint64_t value;
+		uint64_t width;
 		size_t size, operand;
 		BNInstructionTextTokenContext context;
 		uint8_t confidence;
@@ -1345,6 +1366,8 @@ extern "C"
 		BNInstructionTextToken* tokens;
 		size_t count;
 		BNHighlightColor highlight;
+		BNTag** tags;
+		size_t tagCount;
 	};
 
 	struct BNLinearDisassemblyLine
@@ -1367,6 +1390,30 @@ extern "C"
 	{
 		BNFunction* func;
 		BNArchitecture* arch;
+		uint64_t addr;
+	};
+
+	enum BNTagTypeType
+	{
+		UserTagType,
+		NotificationTagType,
+		BookmarksTagType
+	};
+
+	enum BNTagReferenceType
+	{
+		AddressTagReference,
+		FunctionTagReference,
+		DataTagReference
+	};
+
+	struct BNTagReference
+	{
+		BNTagReferenceType refType;
+		bool autoDefined;
+		BNTag* tag;
+		BNArchitecture* arch;
+		BNFunction* func;
 		uint64_t addr;
 	};
 
@@ -1668,6 +1715,7 @@ extern "C"
 		bool suppressNewAutoFunctionAnalysis;
 		BNAnalysisMode mode;
 		bool alwaysAnalyzeIndirectBranches;
+		size_t advancedAnalysisCacheSize;
 	};
 
 	struct BNDownloadInstanceOutputCallbacks
@@ -1724,6 +1772,7 @@ extern "C"
 		void (*setCurrentBasicBlock)(void* ctxt, BNBasicBlock* block);
 		void (*setCurrentAddress)(void* ctxt, uint64_t addr);
 		void (*setCurrentSelection)(void* ctxt, uint64_t begin, uint64_t end);
+		char* (*completeInput)(void* ctxt, const char* text, uint64_t state);
 	};
 
 	struct BNScriptingProviderCallbacks
@@ -1913,6 +1962,12 @@ extern "C"
 		double seconds;
 	};
 
+	struct BNMemoryUsageInfo
+	{
+		char* name;
+		uint64_t value;
+	};
+
 	enum BNMetadataType
 	{
 		InvalidDataType,
@@ -1955,6 +2010,9 @@ extern "C"
 		void (*populateNodes)(void* ctxt);
 		void (*completeLayout)(void* ctxt);
 		BNFlowGraph* (*update)(void* ctxt);
+		void (*freeObject)(void* ctxt);
+		void (*externalRefTaken)(void* ctxt);
+		void (*externalRefReleased)(void* ctxt);
 	};
 
 	struct BNRange
@@ -1979,9 +2037,9 @@ extern "C"
 		SettingsInvalidScope = 0,
 		SettingsAutoScope = 1,
 		SettingsDefaultScope = 2,
-		SettingsUserScope = 3,
-		SettingsWorkspaceScope = 4,
-		SettingsContextScope = 5
+		SettingsUserScope = 4,
+		SettingsWorkspaceScope = 8,
+		SettingsContextScope = 0x10
 	};
 
 	BINARYNINJACOREAPI char* BNAllocString(const char* contents);
@@ -2011,6 +2069,8 @@ extern "C"
 
 	// Plugin initialization
 	BINARYNINJACOREAPI void BNInitCorePlugins(void);
+	BINARYNINJACOREAPI void BNDisablePlugins(void);
+	BINARYNINJACOREAPI bool BNIsPluginsEnabled(void);
 	BINARYNINJACOREAPI void BNInitUserPlugins(void);
 	BINARYNINJACOREAPI void BNInitRepoPlugins(void);
 
@@ -2265,8 +2325,7 @@ extern "C"
 	BINARYNINJACOREAPI BNBinaryView* BNCreateBinaryDataViewFromFile(BNFileMetadata* file, BNFileAccessor* accessor);
 
 	// Creation of new types of binary views
-	BINARYNINJACOREAPI BNBinaryView* BNCreateCustomBinaryView(const char* name, BNFileMetadata* file,
-		BNBinaryView* parent, BNCustomBinaryView* view);
+	BINARYNINJACOREAPI BNBinaryView* BNCreateCustomBinaryView(const char* name, BNFileMetadata* file, BNBinaryView* parent, BNCustomBinaryView* view);
 
 	BINARYNINJACOREAPI BNBinaryViewType* BNGetBinaryViewTypeByName(const char* name);
 	BINARYNINJACOREAPI BNBinaryViewType** BNGetBinaryViewTypes(size_t* count);
@@ -2276,6 +2335,8 @@ extern "C"
 	BINARYNINJACOREAPI char* BNGetBinaryViewTypeLongName(BNBinaryViewType* type);
 	BINARYNINJACOREAPI BNBinaryView* BNCreateBinaryViewOfType(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI bool BNIsBinaryViewTypeValidForData(BNBinaryViewType* type, BNBinaryView* data);
+	BINARYNINJACOREAPI BNSettings* BNGetBinaryViewDefaultLoadSettingsForData(BNBinaryViewType* type, BNBinaryView* data);
+	BINARYNINJACOREAPI BNSettings* BNGetBinaryViewLoadSettingsForData(BNBinaryViewType* type, BNBinaryView* data);
 
 	BINARYNINJACOREAPI BNBinaryViewType* BNRegisterBinaryViewType(const char* name, const char* longName,
 	                                                              BNCustomBinaryViewType* type);
@@ -2495,10 +2556,16 @@ extern "C"
 	BINARYNINJACOREAPI BNFunction** BNGetAnalysisFunctionList(BNBinaryView* view, size_t* count);
 	BINARYNINJACOREAPI void BNFreeFunctionList(BNFunction** funcs, size_t count);
 	BINARYNINJACOREAPI bool BNHasFunctions(BNBinaryView* view);
+	BINARYNINJACOREAPI bool BNHasSymbols(BNBinaryView* view);
+	BINARYNINJACOREAPI bool BNHasDataVariables(BNBinaryView* view);
 	BINARYNINJACOREAPI BNFunction* BNGetAnalysisFunction(BNBinaryView* view, BNPlatform* platform, uint64_t addr);
 	BINARYNINJACOREAPI BNFunction* BNGetRecentAnalysisFunctionForAddress(BNBinaryView* view, uint64_t addr);
 	BINARYNINJACOREAPI BNFunction** BNGetAnalysisFunctionsForAddress(BNBinaryView* view, uint64_t addr, size_t* count);
 	BINARYNINJACOREAPI BNFunction* BNGetAnalysisEntryPoint(BNBinaryView* view);
+
+	BINARYNINJACOREAPI char* BNGetGlobalCommentForAddress(BNBinaryView* view, uint64_t addr);
+	BINARYNINJACOREAPI uint64_t* BNGetGlobalCommentedAddresses(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI void BNSetGlobalCommentForAddress(BNBinaryView* view, uint64_t addr, const char* comment);
 
 	BINARYNINJACOREAPI BNBinaryView* BNGetFunctionData(BNFunction* func);
 	BINARYNINJACOREAPI BNArchitecture* BNGetFunctionArchitecture(BNFunction* func);
@@ -2516,6 +2583,9 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeAddressList(uint64_t* addrs);
 	BINARYNINJACOREAPI void BNSetFunctionComment(BNFunction* func, const char* comment);
 	BINARYNINJACOREAPI void BNSetCommentForAddress(BNFunction* func, uint64_t addr, const char* comment);
+
+	BINARYNINJACOREAPI void BNAddUserCodeReference(BNFunction* func, BNArchitecture* fromArch, uint64_t fromAddr, uint64_t toAddr);
+	BINARYNINJACOREAPI void BNRemoveUserCodeReference(BNFunction* func, BNArchitecture* fromArch, uint64_t fromAddr, uint64_t toAddr);
 
 	BINARYNINJACOREAPI BNBasicBlock* BNNewBasicBlockReference(BNBasicBlock* block);
 	BINARYNINJACOREAPI void BNFreeBasicBlock(BNBasicBlock* block);
@@ -2619,6 +2689,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeBasicBlockEdgeList(BNBasicBlockEdge* edges, size_t count);
 	BINARYNINJACOREAPI bool BNBasicBlockHasUndeterminedOutgoingEdges(BNBasicBlock* block);
 	BINARYNINJACOREAPI bool BNBasicBlockCanExit(BNBasicBlock* block);
+	BINARYNINJACOREAPI bool BNBasicBlockHasInvalidInstructions(BNBasicBlock* block);
 	BINARYNINJACOREAPI size_t BNGetBasicBlockIndex(BNBasicBlock* block);
 	BINARYNINJACOREAPI BNBasicBlock** BNGetBasicBlockDominators(BNBasicBlock* block, size_t* count, bool post);
 	BINARYNINJACOREAPI BNBasicBlock** BNGetBasicBlockStrictDominators(BNBasicBlock* block, size_t* count, bool post);
@@ -2659,9 +2730,11 @@ extern "C"
 	BINARYNINJACOREAPI BNInstructionTextToken* BNGetDisassemblyTextRendererInstructionAnnotations(
 		BNDisassemblyTextRenderer* renderer, uint64_t addr, size_t* count);
 	BINARYNINJACOREAPI bool BNGetDisassemblyTextRendererInstructionText(BNDisassemblyTextRenderer* renderer,
-		uint64_t addr, size_t* len, BNInstructionTextToken** result, size_t* count, uint64_t* displayAddr);
+		uint64_t addr, size_t* len, BNDisassemblyTextLine** result, size_t* count);
 	BINARYNINJACOREAPI bool BNGetDisassemblyTextRendererLines(BNDisassemblyTextRenderer* renderer,
 		uint64_t addr, size_t* len, BNDisassemblyTextLine** result, size_t* count);
+	BINARYNINJACOREAPI BNDisassemblyTextLine* BNPostProcessDisassemblyTextRendererLines(BNDisassemblyTextRenderer* renderer,
+		uint64_t addr, size_t len, BNDisassemblyTextLine* inLines, size_t inCount, size_t* outCount);
 	BINARYNINJACOREAPI void BNResetDisassemblyTextRendererDeduplicatedComments(BNDisassemblyTextRenderer* renderer);
 	BINARYNINJACOREAPI bool BNGetDisassemblyTextRendererSymbolTokens(BNDisassemblyTextRenderer* renderer, uint64_t addr,
 		size_t size, size_t operand, BNInstructionTextToken** result, size_t* count);
@@ -2681,10 +2754,15 @@ extern "C"
 	BINARYNINJACOREAPI BNReferenceSource* BNGetCodeReferencesInRange(BNBinaryView* view, uint64_t addr,
 	                                                                 uint64_t len, size_t* count);
 	BINARYNINJACOREAPI void BNFreeCodeReferences(BNReferenceSource* refs, size_t count);
+	BINARYNINJACOREAPI uint64_t* BNGetCodeReferencesFrom(BNBinaryView* view, BNReferenceSource* src, size_t* count);
+	BINARYNINJACOREAPI uint64_t* BNGetCodeReferencesFromInRange(BNBinaryView* view, BNReferenceSource* src, uint64_t len, size_t* count);
+
 	BINARYNINJACOREAPI uint64_t* BNGetDataReferences(BNBinaryView* view, uint64_t addr, size_t* count);
 	BINARYNINJACOREAPI uint64_t* BNGetDataReferencesInRange(BNBinaryView* view, uint64_t addr, uint64_t len, size_t* count);
 	BINARYNINJACOREAPI uint64_t* BNGetDataReferencesFrom(BNBinaryView* view, uint64_t addr, size_t* count);
 	BINARYNINJACOREAPI uint64_t* BNGetDataReferencesFromInRange(BNBinaryView* view, uint64_t addr, uint64_t len, size_t* count);
+	BINARYNINJACOREAPI void BNAddUserDataReference(BNBinaryView* view, uint64_t fromAddr, uint64_t toAddr);
+	BINARYNINJACOREAPI void BNRemoveUserDataReference(BNBinaryView* view, uint64_t fromAddr, uint64_t toAddr);
 	BINARYNINJACOREAPI void BNFreeDataReferences(uint64_t* refs);
 
 	BINARYNINJACOREAPI void BNRegisterGlobalFunctionRecognizer(BNFunctionRecognizer* rec);
@@ -2717,6 +2795,10 @@ extern "C"
 	BINARYNINJACOREAPI char* BNGetVariableName(BNFunction* func, const BNVariable* var);
 	BINARYNINJACOREAPI uint64_t BNToVariableIdentifier(const BNVariable* var);
 	BINARYNINJACOREAPI BNVariable BNFromVariableIdentifier(uint64_t id);
+
+	BINARYNINJACOREAPI BNReferenceSource* BNGetFunctionCallSites(BNFunction* func, size_t* count);
+	BINARYNINJACOREAPI uint64_t* BNGetCallees(BNBinaryView* view, BNReferenceSource* callSite, size_t* count);
+	BINARYNINJACOREAPI BNReferenceSource* BNGetCallers(BNBinaryView* view, uint64_t callee, size_t* count);
 
 	BINARYNINJACOREAPI void BNSetAutoIndirectBranches(BNFunction* func, BNArchitecture* sourceArch, uint64_t source,
 	                                                  BNArchitectureAndAddress* branches, size_t count);
@@ -2851,6 +2933,73 @@ extern "C"
 	BINARYNINJACOREAPI void BNSetAutoBasicBlockHighlight(BNBasicBlock* block, BNHighlightColor color);
 	BINARYNINJACOREAPI void BNSetUserBasicBlockHighlight(BNBasicBlock* block, BNHighlightColor color);
 
+	BINARYNINJACOREAPI BNTagType* BNCreateTagType(BNBinaryView* view);
+	BINARYNINJACOREAPI BNTagType* BNNewTagTypeReference(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNFreeTagType(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNFreeTagTypeList(BNTagType** tagTypes, size_t count);
+	BINARYNINJACOREAPI BNBinaryView* BNTagTypeGetView(BNTagType* tagType);
+	BINARYNINJACOREAPI char* BNTagTypeGetName(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNTagTypeSetName(BNTagType* tagType, const char* name);
+	BINARYNINJACOREAPI char* BNTagTypeGetIcon(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNTagTypeSetIcon(BNTagType* tagType, const char* icon);
+	BINARYNINJACOREAPI bool BNTagTypeGetVisible(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNTagTypeSetVisible(BNTagType* tagType, bool visible);
+	BINARYNINJACOREAPI BNTagTypeType BNTagTypeGetType(BNTagType* tagType);
+	BINARYNINJACOREAPI void BNTagTypeSetType(BNTagType* tagType, BNTagTypeType type);
+
+	BINARYNINJACOREAPI BNTag* BNCreateTag(BNTagType* type, const char* data);
+	BINARYNINJACOREAPI BNTag* BNNewTagReference(BNTag* tag);
+	BINARYNINJACOREAPI void BNFreeTag(BNTag* tag);
+	BINARYNINJACOREAPI void BNFreeTagList(BNTag** tags, size_t count);
+	BINARYNINJACOREAPI BNTagType* BNTagGetType(BNTag* tag);
+	BINARYNINJACOREAPI char* BNTagGetData(BNTag* tag);
+	BINARYNINJACOREAPI void BNTagSetData(BNTag* tag, const char* data);
+
+	BINARYNINJACOREAPI void BNAddTagType(BNBinaryView* view, BNTagType* tagType);
+	BINARYNINJACOREAPI void BNRemoveTagType(BNBinaryView* view, BNTagType* tagType);
+	BINARYNINJACOREAPI BNTagType* BNGetTagType(BNBinaryView* view, const char* name);
+	BINARYNINJACOREAPI BNTagType* BNGetTagTypeWithType(BNBinaryView* view, const char* name, BNTagTypeType type);
+	BINARYNINJACOREAPI BNTagType** BNGetTagTypes(BNBinaryView* view, size_t* count);
+
+	BINARYNINJACOREAPI void BNAddTag(BNBinaryView* view, BNTag* tag);
+	BINARYNINJACOREAPI BNTag* BNGetTag(BNBinaryView* view, uint64_t tagId);
+	BINARYNINJACOREAPI void BNRemoveTag(BNBinaryView* view, BNTag* tag);
+
+	BINARYNINJACOREAPI BNTagReference* BNGetAllTagReferences(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetAllAddressTagReferences(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetAllFunctionTagReferences(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetAllTagReferencesOfType(BNBinaryView* view, BNTagType* tagType, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetTagReferencesOfType(BNBinaryView* view, BNTagType* tagType, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetDataTagReferences(BNBinaryView* view, size_t* count);
+	BINARYNINJACOREAPI void BNFreeTagReferences(BNTagReference* refs, size_t count);
+	BINARYNINJACOREAPI BNTag** BNGetDataTags(BNBinaryView* view, uint64_t addr, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetDataTagsOfType(BNBinaryView* view, uint64_t addr, BNTagType* tagType, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetDataTagsInRange(BNBinaryView* view, uint64_t start, uint64_t end, size_t* count);
+	BINARYNINJACOREAPI void BNAddAutoDataTag(BNBinaryView* view, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveAutoDataTag(BNBinaryView* view, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNAddUserDataTag(BNBinaryView* view, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveUserDataTag(BNBinaryView* view, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveTagReference(BNBinaryView* view, BNTagReference ref);
+
+	BINARYNINJACOREAPI BNTagReference* BNGetFunctionAllTagReferences(BNFunction* func, size_t* count);
+	BINARYNINJACOREAPI BNTagReference* BNGetFunctionTagReferencesOfType(BNFunction* func, BNTagType* tagType, size_t* count);
+
+	BINARYNINJACOREAPI BNTagReference* BNGetAddressTagReferences(BNFunction* func, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetAddressTags(BNFunction* func, BNArchitecture* arch, uint64_t addr, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetAddressTagsOfType(BNFunction* func, BNArchitecture* arch, uint64_t addr, BNTagType* tagType, size_t* count);
+	BINARYNINJACOREAPI void BNAddAutoAddressTag(BNFunction* func, BNArchitecture* arch, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveAutoAddressTag(BNFunction* func, BNArchitecture* arch, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNAddUserAddressTag(BNFunction* func, BNArchitecture* arch, uint64_t addr, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveUserAddressTag(BNFunction* func, BNArchitecture* arch, uint64_t addr, BNTag* tag);
+
+	BINARYNINJACOREAPI BNTagReference* BNGetFunctionTagReferences(BNFunction* func, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetFunctionTags(BNFunction* func, size_t* count);
+	BINARYNINJACOREAPI BNTag** BNGetFunctionTagsOfType(BNFunction* func, BNTagType* tagType, size_t* count);
+	BINARYNINJACOREAPI void BNAddAutoFunctionTag(BNFunction* func, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveAutoFunctionTag(BNFunction* func, BNTag* tag);
+	BINARYNINJACOREAPI void BNAddUserFunctionTag(BNFunction* func, BNTag* tag);
+	BINARYNINJACOREAPI void BNRemoveUserFunctionTag(BNFunction* func, BNTag* tag);
+
 	BINARYNINJACOREAPI BNPerformanceInfo* BNGetFunctionAnalysisPerformanceInfo(BNFunction* func, size_t* count);
 	BINARYNINJACOREAPI void BNFreeAnalysisPerformanceInfo(BNPerformanceInfo* info, size_t count);
 
@@ -2964,6 +3113,7 @@ extern "C"
 	BINARYNINJACOREAPI uint64_t BNGetSymbolAddress(BNSymbol* sym);
 	BINARYNINJACOREAPI uint64_t BNGetSymbolOrdinal(BNSymbol* sym);
 	BINARYNINJACOREAPI bool BNIsSymbolAutoDefined(BNSymbol* sym);
+	BINARYNINJACOREAPI char** BNGetSymbolAliases(BNSymbol* sym, size_t* count);
 
 	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByAddress(BNBinaryView* view, uint64_t addr, const BNNameSpace* nameSpace);
 	BINARYNINJACOREAPI BNSymbol* BNGetSymbolByRawName(BNBinaryView* view, const char* name, const BNNameSpace* nameSpace);
@@ -2974,6 +3124,7 @@ extern "C"
 	BINARYNINJACOREAPI BNSymbol** BNGetSymbolsOfTypeInRange(BNBinaryView* view, BNSymbolType type,
 	                                                        uint64_t start, uint64_t len, size_t* count, const BNNameSpace* nameSpace);
 	BINARYNINJACOREAPI void BNFreeSymbolList(BNSymbol** syms, size_t count);
+	BINARYNINJACOREAPI BNSymbol** BNGetVisibleSymbols(BNBinaryView* view, size_t* count, const BNNameSpace* nameSpace);
 
 	BINARYNINJACOREAPI void BNDefineAutoSymbol(BNBinaryView* view, BNSymbol* sym);
 	BINARYNINJACOREAPI void BNUndefineAutoSymbol(BNBinaryView* view, BNSymbol* sym);
@@ -3539,7 +3690,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeSystemCallList(BNSystemCallInfo* syscalls, size_t count);
 	BINARYNINJACOREAPI BNType* BNGetPlatformTypeByName(BNPlatform* platform, BNQualifiedName* name);
 	BINARYNINJACOREAPI BNType* BNGetPlatformVariableByName(BNPlatform* platform, BNQualifiedName* name);
-	BINARYNINJACOREAPI BNType* BNGetPlatformFunctionByName(BNPlatform* platform, BNQualifiedName* name);
+	BINARYNINJACOREAPI BNType* BNGetPlatformFunctionByName(BNPlatform* platform, BNQualifiedName* name, bool exactMatch);
 	BINARYNINJACOREAPI char* BNGetPlatformSystemCallName(BNPlatform* platform, uint32_t number);
 	BINARYNINJACOREAPI BNType* BNGetPlatformSystemCallType(BNPlatform* platform, uint32_t number);
 
@@ -3592,6 +3743,9 @@ extern "C"
 	BINARYNINJACOREAPI void BNUnregisterScriptingInstanceOutputListener(BNScriptingInstance* instance,
 		BNScriptingOutputListener* callbacks);
 
+	BINARYNINJACOREAPI const char* BNGetScriptingInstanceDelimiters(BNScriptingInstance* instance);
+	BINARYNINJACOREAPI void BNSetScriptingInstanceDelimiters(BNScriptingInstance* instance, const char* delimiters);
+
 	BINARYNINJACOREAPI BNScriptingProviderInputReadyState BNGetScriptingInstanceInputReadyState(
 		BNScriptingInstance* instance);
 	BINARYNINJACOREAPI BNScriptingProviderExecuteResult BNExecuteScriptInput(BNScriptingInstance* instance,
@@ -3603,6 +3757,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNSetScriptingInstanceCurrentAddress(BNScriptingInstance* instance, uint64_t addr);
 	BINARYNINJACOREAPI void BNSetScriptingInstanceCurrentSelection(BNScriptingInstance* instance,
 		uint64_t begin, uint64_t end);
+	BINARYNINJACOREAPI char* BNScriptingInstanceCompleteInput(BNScriptingInstance* instance, const char* text, uint64_t state);
 
 	// Main thread actions
 	BINARYNINJACOREAPI void BNRegisterMainThread(BNMainThreadCallbacks* callbacks);
@@ -3690,39 +3845,53 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeDemangledName(char*** name, size_t nameElements);
 
 	// Plugin repository APIs
-	BINARYNINJACOREAPI const char* BNPluginGetApi(BNRepoPlugin* p);
+	BINARYNINJACOREAPI char** BNPluginGetApis(BNRepoPlugin* p, size_t* count);
 	BINARYNINJACOREAPI const char* BNPluginGetAuthor(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetDescription(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetLicense(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetLicenseText(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetLongdescription(BNRepoPlugin* p);
-	BINARYNINJACOREAPI const char* BNPluginGetMinimimVersions(BNRepoPlugin* p);
+	BINARYNINJACOREAPI uint64_t BNPluginGetMinimimVersion(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetName(BNRepoPlugin* p);
-	BINARYNINJACOREAPI const char* BNPluginGetUrl(BNRepoPlugin* p);
+	BINARYNINJACOREAPI const char* BNPluginGetProjectUrl(BNRepoPlugin* p);
+	BINARYNINJACOREAPI const char* BNPluginGetPackageUrl(BNRepoPlugin* p);
+	BINARYNINJACOREAPI const char* BNPluginGetAuthorUrl(BNRepoPlugin* p);
 	BINARYNINJACOREAPI const char* BNPluginGetVersion(BNRepoPlugin* p);
+	BINARYNINJACOREAPI const char* BNPluginGetCommit(BNRepoPlugin* p);
 	BINARYNINJACOREAPI void BNFreePluginTypes(BNPluginType* r);
 	BINARYNINJACOREAPI BNRepoPlugin* BNNewPluginReference(BNRepoPlugin* r);
 	BINARYNINJACOREAPI void BNFreePlugin(BNRepoPlugin* plugin);
 	BINARYNINJACOREAPI const char* BNPluginGetPath(BNRepoPlugin* p);
 	BINARYNINJACOREAPI bool BNPluginIsInstalled(BNRepoPlugin* p);
-	BINARYNINJACOREAPI void BNPluginSetEnabled(BNRepoPlugin* p, bool enabled);
 	BINARYNINJACOREAPI bool BNPluginIsEnabled(BNRepoPlugin* p);
-	BINARYNINJACOREAPI BNPluginUpdateStatus BNPluginGetPluginUpdateStatus(BNRepoPlugin* p);
+	BINARYNINJACOREAPI BNPluginStatus BNPluginGetPluginStatus(BNRepoPlugin* p);
 	BINARYNINJACOREAPI BNPluginType* BNPluginGetPluginTypes(BNRepoPlugin* p, size_t* count);
-	BINARYNINJACOREAPI bool BNPluginEnable(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginEnable(BNRepoPlugin* p, bool force);
 	BINARYNINJACOREAPI bool BNPluginDisable(BNRepoPlugin* p);
 	BINARYNINJACOREAPI bool BNPluginInstall(BNRepoPlugin* p);
 	BINARYNINJACOREAPI bool BNPluginUninstall(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginUpdate(BNRepoPlugin* p);
+	BINARYNINJACOREAPI char* BNPluginGetInstallInstructions(BNRepoPlugin* p, const char* platform);
+	BINARYNINJACOREAPI char** BNPluginGetPlatforms(BNRepoPlugin* p, size_t* count);
+	BINARYNINJACOREAPI void BNFreePluginPlatforms(char** platforms, size_t count);
+	BINARYNINJACOREAPI const char* BNPluginGetRepository(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsBeingDeleted(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsBeingUpdated(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsRunning(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsUpdatePending(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsDisablePending(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsDeletePending(BNRepoPlugin* p);
+	BINARYNINJACOREAPI bool BNPluginIsUpdateAvailable(BNRepoPlugin* p);
+
+	BINARYNINJACOREAPI char* BNPluginGetProjectData(BNRepoPlugin* p);
+	BINARYNINJACOREAPI uint64_t BNPluginGetLastUpdate(BNRepoPlugin* p);
 
 	BINARYNINJACOREAPI BNRepository* BNNewRepositoryReference(BNRepository* r);
 	BINARYNINJACOREAPI void BNFreeRepository(BNRepository* r);
 	BINARYNINJACOREAPI char* BNRepositoryGetUrl(BNRepository* r);
 	BINARYNINJACOREAPI char* BNRepositoryGetRepoPath(BNRepository* r);
-	BINARYNINJACOREAPI char* BNRepositoryGetLocalReference(BNRepository* r);
-	BINARYNINJACOREAPI char* BNRepositoryGetRemoteReference(BNRepository* r);
 	BINARYNINJACOREAPI BNRepoPlugin** BNRepositoryGetPlugins(BNRepository* r, size_t* count);
 	BINARYNINJACOREAPI void BNFreeRepositoryPluginList(BNRepoPlugin** r);
-	BINARYNINJACOREAPI bool BNRepositoryIsInitialized(BNRepository* r);
 	BINARYNINJACOREAPI void BNRepositoryFreePluginDirectoryList(char** list, size_t count);
 	BINARYNINJACOREAPI BNRepoPlugin* BNRepositoryGetPluginByPath(BNRepository* r, const char* pluginPath);
 	BINARYNINJACOREAPI const char* BNRepositoryGetPluginsPath(BNRepository* r);
@@ -3735,23 +3904,18 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeRepositoryManagerRepositoriesList(BNRepository** r);
 	BINARYNINJACOREAPI bool BNRepositoryManagerAddRepository(BNRepositoryManager* r,
 		const char* url,
-		const char* repoPath,
-		const char* localReference,
-		const char* remoteReference);
-	BINARYNINJACOREAPI bool BNRepositoryManagerEnablePlugin(BNRepositoryManager* r, const char* repoName, const char* pluginPath);
-	BINARYNINJACOREAPI bool BNRepositoryManagerDisablePlugin(BNRepositoryManager* r, const char* repoName, const char* pluginPath);
-	BINARYNINJACOREAPI bool BNRepositoryManagerInstallPlugin(BNRepositoryManager* r, const char* repoName, const char* pluginPath);
-	BINARYNINJACOREAPI bool BNRepositoryManagerUninstallPlugin(BNRepositoryManager* r, const char* repoName, const char* pluginPath);
-	BINARYNINJACOREAPI bool BNRepositoryManagerUpdatePlugin(BNRepositoryManager* r, const char* repoName, const char* pluginPath);
+		const char* repoPath);
 	BINARYNINJACOREAPI BNRepository* BNRepositoryGetRepositoryByPath(BNRepositoryManager* r, const char* repoPath);
 	BINARYNINJACOREAPI BNRepositoryManager* BNGetRepositoryManager();
 
 	BINARYNINJACOREAPI BNRepository* BNRepositoryManagerGetDefaultRepository(BNRepositoryManager* r);
 	BINARYNINJACOREAPI void BNRegisterForPluginLoading(
 		const char* pluginApiName,
-		bool (*cb)(const char* repoPath, const char* pluginPath, void* ctx),
+		bool (*cb)(const char* repoPath, const char* pluginPath, bool force, void* ctx), // BNLoadPluginCallback
 		void* ctx);
-	BINARYNINJACOREAPI bool BNLoadPluginForApi(const char* pluginApiName, const char* repoPath, const char* pluginPath);
+	BINARYNINJACOREAPI bool BNLoadPluginForApi(const char* pluginApiName, const char* repoPath, const char* pluginPath, bool force);
+	BINARYNINJACOREAPI char** BNGetRegisteredPluginLoaders(size_t* count);
+	BINARYNINJACOREAPI void BNFreeRegisteredPluginLoadersList(char** pluginLoaders, size_t count);
 
 	// LLVM Services APIs
 	BINARYNINJACOREAPI void BNLlvmServicesInit(void);
@@ -3769,39 +3933,50 @@ extern "C"
 	BINARYNINJACOREAPI bool BNIsPathDirectory(const char* path);
 	BINARYNINJACOREAPI bool BNIsPathRegularFile(const char* path);
 	BINARYNINJACOREAPI bool BNFileSize(const char* path, uint64_t* size);
+	BINARYNINJACOREAPI bool BNRenameFile(const char* source, const char* dest);
 
 	// Settings APIs
-	BINARYNINJACOREAPI bool BNSettingsRegisterGroup(const char* registry, const char* group, const char* title);
-	BINARYNINJACOREAPI bool BNSettingsRegisterSetting(const char* registry, const char* id, const char* properties);
-	BINARYNINJACOREAPI bool BNSettingsUpdateProperty(const char* registry, const char* id, const char* property);
-	BINARYNINJACOREAPI bool BNSettingsUpdateBoolProperty(const char* registry, const char* id, const char* property, bool value);
-	BINARYNINJACOREAPI bool BNSettingsUpdateDoubleProperty(const char* registry, const char* id, const char* property, double value);
-	BINARYNINJACOREAPI bool BNSettingsUpdateInt64Property(const char* registry, const char* id, const char* property, int64_t value);
-	BINARYNINJACOREAPI bool BNSettingsUpdateUInt64Property(const char* registry, const char* id, const char* property, uint64_t value);
-	BINARYNINJACOREAPI bool BNSettingsUpdateStringProperty(const char* registry, const char* id, const char* property, const char* value);
-	BINARYNINJACOREAPI bool BNSettingsUpdateStringListProperty(const char* registry, const char* id, const char* property, const char** value, size_t size);
+	BINARYNINJACOREAPI BNSettings* BNCreateSettings(const char* schemaId);
+	BINARYNINJACOREAPI BNSettings* BNNewSettingsReference(BNSettings* settings);
+	BINARYNINJACOREAPI void BNFreeSettings(BNSettings* settings);
+	BINARYNINJACOREAPI void BNSettingsSetResourceId(BNSettings* settings, const char* resourceId);
+	BINARYNINJACOREAPI bool BNSettingsRegisterGroup(BNSettings* settings, const char* group, const char* title);
+	BINARYNINJACOREAPI bool BNSettingsRegisterSetting(BNSettings* settings, const char* key, const char* properties);
+	BINARYNINJACOREAPI bool BNSettingsContains(BNSettings* settings, const char* key);
+	BINARYNINJACOREAPI bool BNSettingsIsEmpty(BNSettings* settings);
+	BINARYNINJACOREAPI const char** BNSettingsKeysList(BNSettings* settings, size_t* inoutSize);
+	BINARYNINJACOREAPI const char** BNSettingsQueryPropertyStringList(BNSettings* settings, const char* key, const char* property, size_t* inoutSize);
+	BINARYNINJACOREAPI bool BNSettingsUpdateProperty(BNSettings* settings, const char* key, const char* property);
+	BINARYNINJACOREAPI bool BNSettingsUpdateBoolProperty(BNSettings* settings, const char* key, const char* property, bool value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateDoubleProperty(BNSettings* settings, const char* key, const char* property, double value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateInt64Property(BNSettings* settings, const char* key, const char* property, int64_t value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateUInt64Property(BNSettings* settings, const char* key, const char* property, uint64_t value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateStringProperty(BNSettings* settings, const char* key, const char* property, const char* value);
+	BINARYNINJACOREAPI bool BNSettingsUpdateStringListProperty(BNSettings* settings, const char* key, const char* property, const char** value, size_t size);
 
-	BINARYNINJACOREAPI char* BNSettingsGetSchema(const char* registry);
-	BINARYNINJACOREAPI bool BNDeserializeSettings(const char* registry, const char* contents, BNBinaryView* view, BNSettingsScope scope);
-	BINARYNINJACOREAPI char* BNSerializeSettings(const char* registry, BNBinaryView* view, BNSettingsScope scope);
+	BINARYNINJACOREAPI bool BNSettingsDeserializeSchema(BNSettings* settings, const char* schema, BNSettingsScope scope, bool merge);
+	BINARYNINJACOREAPI char* BNSettingsSerializeSchema(BNSettings* settings);
+	BINARYNINJACOREAPI bool BNDeserializeSettings(BNSettings* settings, const char* contents, BNBinaryView* view, BNSettingsScope scope);
+	BINARYNINJACOREAPI char* BNSerializeSettings(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope);
 
-	BINARYNINJACOREAPI bool BNSettingsCopyValue(const char* registry, const char* destRegistry, const char* id);
-	BINARYNINJACOREAPI bool BNSettingsReset(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope scope);
-	BINARYNINJACOREAPI bool BNSettingsResetAll(const char* registry, BNBinaryView* view, BNSettingsScope scope);
+	BINARYNINJACOREAPI bool BNSettingsCopyValuesFrom(BNSettings* settings, BNSettings* source, BNSettingsScope scope);
+	BINARYNINJACOREAPI bool BNSettingsReset(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope scope);
+	BINARYNINJACOREAPI bool BNSettingsResetAll(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope);
 
-	BINARYNINJACOREAPI bool BNSettingsGetBool(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
-	BINARYNINJACOREAPI double BNSettingsGetDouble(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
-	BINARYNINJACOREAPI int64_t BNSettingsGetInt64(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
-	BINARYNINJACOREAPI uint64_t BNSettingsGetUInt64(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
-	BINARYNINJACOREAPI char* BNSettingsGetString(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope);
-	BINARYNINJACOREAPI const char** BNSettingsGetStringList(const char* registry, const char* id, BNBinaryView* view, BNSettingsScope* scope, size_t* inoutSize);
+	BINARYNINJACOREAPI bool BNSettingsGetBool(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI double BNSettingsGetDouble(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI int64_t BNSettingsGetInt64(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI uint64_t BNSettingsGetUInt64(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI char* BNSettingsGetString(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
+	BINARYNINJACOREAPI const char** BNSettingsGetStringList(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope, size_t* inoutSize);
+	BINARYNINJACOREAPI char* BNSettingsGetJsonString(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope* scope);
 
-	BINARYNINJACOREAPI bool BNSettingsSetBool(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, bool value);
-	BINARYNINJACOREAPI bool BNSettingsSetDouble(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, double value);
-	BINARYNINJACOREAPI bool BNSettingsSetInt64(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, int64_t value);
-	BINARYNINJACOREAPI bool BNSettingsSetUInt64(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, uint64_t value);
-	BINARYNINJACOREAPI bool BNSettingsSetString(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, const char* value);
-	BINARYNINJACOREAPI bool BNSettingsSetStringList(const char* registry, BNBinaryView* view, BNSettingsScope scope, const char* id, const char** value, size_t size);
+	BINARYNINJACOREAPI bool BNSettingsSetBool(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, bool value);
+	BINARYNINJACOREAPI bool BNSettingsSetDouble(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, double value);
+	BINARYNINJACOREAPI bool BNSettingsSetInt64(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, int64_t value);
+	BINARYNINJACOREAPI bool BNSettingsSetUInt64(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, uint64_t value);
+	BINARYNINJACOREAPI bool BNSettingsSetString(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, const char* value);
+	BINARYNINJACOREAPI bool BNSettingsSetStringList(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, const char* key, const char** value, size_t size);
 
 	//Metadata APIs
 
@@ -3857,6 +4032,8 @@ extern "C"
 	BINARYNINJACOREAPI BNMetadata* BNBinaryViewQueryMetadata(BNBinaryView* view, const char* key);
 	BINARYNINJACOREAPI void BNBinaryViewRemoveMetadata(BNBinaryView* view, const char* key);
 
+	BINARYNINJACOREAPI BNSettings* BNBinaryViewGetLoadSettings(BNBinaryView* view, const char* typeName);
+	BINARYNINJACOREAPI void BNBinaryViewSetLoadSettings(BNBinaryView* view, const char* typeName, BNSettings* settings);
 
 	// Relocation object methods
 	BINARYNINJACOREAPI BNRelocation* BNNewRelocationReference(BNRelocation* reloc);
@@ -3923,6 +4100,8 @@ extern "C"
 
 	BINARYNINJACOREAPI void* BNRegisterObjectRefDebugTrace(const char* typeName);
 	BINARYNINJACOREAPI void BNUnregisterObjectRefDebugTrace(const char* typeName, void* trace);
+	BINARYNINJACOREAPI BNMemoryUsageInfo* BNGetMemoryUsageInfo(size_t* count);
+	BINARYNINJACOREAPI void BNFreeMemoryUsageInfo(BNMemoryUsageInfo* info, size_t count);
 
 #ifdef __cplusplus
 }

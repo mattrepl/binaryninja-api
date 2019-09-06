@@ -58,9 +58,9 @@ class FlowGraphNode(object):
 				raise ValueError("flow graph node must be associated with a graph")
 			handle = core.BNCreateFlowGraphNode(graph.handle)
 		self.handle = handle
-		self.graph = graph
-		if self.graph is None:
-			self.graph = FlowGraph(handle = core.BNGetFlowGraphNodeOwner(self.handle))
+		self._graph = graph
+		if self._graph is None:
+			self._graph = FlowGraph(handle = core.BNGetFlowGraphNodeOwner(self.handle))
 
 	def __del__(self):
 		if self.handle is not None:
@@ -75,6 +75,15 @@ class FlowGraphNode(object):
 		if not isinstance(value, FlowGraphNode):
 			return True
 		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+
+	@property
+	def graph(self):
+		""" """
+		return self._graph
+
+	@graph.setter
+	def graph(self, value):
+		self._graph = value
 
 	@property
 	def basic_block(self):
@@ -188,7 +197,7 @@ class FlowGraphNode(object):
 			branch_type = BranchType(edges[i].type)
 			target = edges[i].target
 			if target:
-				target = FlowGraphNode(self.graph, core.BNNewFlowGraphNodeReference(target))
+				target = FlowGraphNode(self._graph, core.BNNewFlowGraphNodeReference(target))
 			points = []
 			for j in range(0, edges[i].pointCount):
 				points.append((edges[i].points[j].x, edges[i].points[j].y))
@@ -206,7 +215,7 @@ class FlowGraphNode(object):
 			branch_type = BranchType(edges[i].type)
 			target = edges[i].target
 			if target:
-				target = FlowGraphNode(self.graph, core.BNNewFlowGraphNodeReference(target))
+				target = FlowGraphNode(self._graph, core.BNNewFlowGraphNodeReference(target))
 			points = []
 			for j in range(0, edges[i].pointCount):
 				points.append((edges[i].points[j].x, edges[i].points[j].y))
@@ -268,7 +277,7 @@ class FlowGraphNode(object):
 		:param BranchType edge_type: Type of edge to add
 		:param FlowGraphNode target: Target node object
 		"""
-		if not target.is_valid_for_graph(self.graph):
+		if not target.is_valid_for_graph(self._graph):
 			raise ValueError("Target of edge has not been added to the owning graph")
 		core.BNAddFlowGraphNodeOutgoingEdge(self.handle, edge_type, target.handle)
 
@@ -338,6 +347,8 @@ class FlowGraph(object):
 	from incoming edges, or graphs that have disjoint subgraphs will not render correctly. This will be fixed \
 	in a future version.
 	"""
+	_registered_instances = []
+
 	def __init__(self, handle = None):
 		if handle is None:
 			self._ext_cb = core.BNCustomFlowGraph()
@@ -346,6 +357,8 @@ class FlowGraph(object):
 			self._ext_cb.populateNodes = self._ext_cb.populateNodes.__class__(self._populate_nodes)
 			self._ext_cb.completeLayout = self._ext_cb.completeLayout.__class__(self._complete_layout)
 			self._ext_cb.update = self._ext_cb.update.__class__(self._update)
+			self._ext_cb.externalRefTaken = self._ext_cb.externalRefTaken.__class__(self._external_ref_taken)
+			self._ext_cb.externalRefReleased = self._ext_cb.externalRefReleased.__class__(self._external_ref_released)
 			handle = core.BNCreateCustomFlowGraph(self._ext_cb)
 		self.handle = handle
 
@@ -390,10 +403,22 @@ class FlowGraph(object):
 			log.log_error(traceback.format_exc())
 			return None
 
+	def _external_ref_taken(self, ctxt):
+		try:
+			self.__class__._registered_instances.append(self)
+		except:
+			log.log_error(traceback.format_exc())
+
+	def _external_ref_released(self, ctxt):
+		try:
+			self.__class__._registered_instances.remove(self)
+		except:
+			log.log_error(traceback.format_exc())
+
 	def finish_prepare_for_layout(self):
 		"""
 		``finish_prepare_for_layout`` signals that preparations for rendering a graph are complete.
-		This method should only be called by a ``prepare_for_layout`` reimplementation.
+		This method should only be called by a :func:`prepare_for_layout` reimplementation.
 		"""
 		core.BNFinishPrepareForLayout(self.handle)
 
@@ -401,7 +426,7 @@ class FlowGraph(object):
 		"""
 		``prepare_for_layout`` can be overridden by subclasses to handling preparations that must take
 		place before a flow graph is rendered, such as waiting for a function to finish analysis. If
-		this function is overridden, the ``finish_prepare_for_layout`` method must be called once
+		this function is overridden, the :func:`finish_prepare_for_layout` method must be called once
 		preparations are completed.
 		"""
 		self.finish_prepare_for_layout()
@@ -637,7 +662,7 @@ class FlowGraph(object):
 		display. After this function returns, each node will contain coordinates and extents that can be
 		used to render a graph with minimum additional computation.
 
-		Do not use this API on the UI thread (use ``layout`` with a callback instead).
+		Do not use this API on the UI thread (use :func:`layout` with a callback instead).
 		"""
 		self._wait_cond = threading.Lock()
 		
@@ -684,10 +709,10 @@ class FlowGraph(object):
 	def update(self):
 		"""
 		``update`` can be overridden by subclasses to allow a graph to be updated after it has been
-		presented in the UI. This will automatically occur if the function referenced by the ``function``
+		presented in the UI. This will automatically occur if the function referenced by the :attr:`function`
 		property has been updated.
 
-		Return a new ``FlowGraph`` object with the new information if updates are desired. If the graph
+		Return a new :class:`FlowGraph` object with the new information if updates are desired. If the graph
 		does not need updating, ``None`` can be returned to leave the graph in its current state.
 
 		:return: Updated graph, or ``None``

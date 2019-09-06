@@ -30,7 +30,7 @@ from binaryninja import _binaryninjacore as core
 from binaryninja.enums import TransformType
 
 # 2-3 compatibility
-from binaryninja import long
+import numbers
 from binaryninja import range
 from binaryninja import with_metaclass
 
@@ -87,20 +87,46 @@ class _TransformMetaClass(type):
 
 class TransformParameter(object):
 	def __init__(self, name, long_name = None, fixed_length = 0):
-		self.name = name
+		self._name = name
 		if long_name is None:
-			self.long_name = name
+			self._long_name = name
 		else:
-			self.long_name = long_name
-		self.fixed_length = fixed_length
+			self._long_name = long_name
+		self._fixed_length = fixed_length
 
 	def __repr__(self):
 		return "<TransformParameter: {} fixed length: {}>".format(
-			self.long_name, self.fixed_length
+			self._long_name, self._fixed_length
 		)
+
+	@property
+	def name(self):
+		"""(read-only)"""
+		return self._name
+
+	@property
+	def long_name(self):
+		"""(read-only)"""
+		return self._long_name
+
+	@property
+	def fixed_length(self):
+		"""(read-only)"""
+		return self._fixed_length
 
 
 class Transform(with_metaclass(_TransformMetaClass, object)):
+	"""
+	``class Transform`` is an implementation of the TransformMetaClass that implements custom transformations. New 
+	transformations may be added at runtime, so an instance of a transform is created like::
+
+		>>> list(Transform)
+		[<transform: Zlib>, <transform: StringEscape>, <transform: RawHex>, <transform: HexDump>, <transform: Base64>, <transform: Reverse>, <transform: CArray08>, <transform: CArrayA16>, <transform: CArrayA32>, <transform: CArrayA64>, <transform: CArrayB16>, <transform: CArrayB32>, <transform: CArrayB64>, <transform: IntList08>, <transform: IntListA16>, <transform: IntListA32>, <transform: IntListA64>, <transform: IntListB16>, <transform: IntListB32>, <transform: IntListB64>, <transform: MD4>, <transform: MD5>, <transform: SHA1>, <transform: SHA224>, <transform: SHA256>, <transform: SHA384>, <transform: SHA512>, <transform: AES-128 ECB>, <transform: AES-128 CBC>, <transform: AES-256 ECB>, <transform: AES-256 CBC>, <transform: DES ECB>, <transform: DES CBC>, <transform: Triple DES ECB>, <transform: Triple DES CBC>, <transform: RC2 ECB>, <transform: RC2 CBC>, <transform: Blowfish ECB>, <transform: Blowfish CBC>, <transform: CAST ECB>, <transform: CAST CBC>, <transform: RC4>, <transform: XOR>]
+		>>> sha512=Transform['SHA512']
+		>>> rawhex=Transform['RawHex']
+		>>> rawhex.encode(sha512.encode("test string"))
+		'10e6d647af44624442f388c2c14a787ff8b17e6165b83d767ec047768d8cbcb71a1a3226e7cc7816bc79c0427d94a9da688c41a3992c7bf5e4d7cc3e0be5dbac'
+	"""
 	transform_type = None
 	name = None
 	long_name = None
@@ -181,11 +207,11 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 			param_map = {}
 			for i in range(0, count):
 				data = databuffer.DataBuffer(handle = core.BNDuplicateDataBuffer(params[i].value))
-				param_map[params[i].name] = str(data)
-			result = self.perform_decode(str(input_obj), param_map)
+				param_map[params[i].name] = bytes(data)
+			result = self.perform_decode(bytes(input_obj), param_map)
 			if result is None:
 				return False
-			result = str(result)
+			result = bytes(result)
 			core.BNSetDataBufferContents(output_buf, result, len(result))
 			return True
 		except:
@@ -198,11 +224,11 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 			param_map = {}
 			for i in range(0, count):
 				data = databuffer.DataBuffer(handle = core.BNDuplicateDataBuffer(params[i].value))
-				param_map[params[i].name] = str(data)
-			result = self.perform_encode(str(input_obj), param_map)
+				param_map[params[i].name] = bytes(data)
+			result = self.perform_encode(bytes(input_obj), param_map)
 			if result is None:
 				return False
-			result = str(result)
+			result = bytes(result)
 			core.BNSetDataBufferContents(output_buf, result, len(result))
 			return True
 		except:
@@ -225,31 +251,33 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 		return None
 
 	def decode(self, input_buf, params = {}):
-		if isinstance(input_buf, int) or isinstance(input_buf, long):
+		if isinstance(input_buf, int) or isinstance(input_buf, numbers.Integral):
 			return None
 		input_buf = databuffer.DataBuffer(input_buf)
 		output_buf = databuffer.DataBuffer()
 		keys = list(params.keys())
 		param_buf = (core.BNTransformParameter * len(keys))()
+		data = []
 		for i in range(0, len(keys)):
-			data = databuffer.DataBuffer(params[keys[i]])
+			data.append(databuffer.DataBuffer(params[keys[i]]))
 			param_buf[i].name = keys[i]
-			param_buf[i].value = data.handle
+			param_buf[i].value = data[i].handle
 		if not core.BNDecode(self.handle, input_buf.handle, output_buf.handle, param_buf, len(keys)):
 			return None
 		return str(output_buf)
 
 	def encode(self, input_buf, params = {}):
-		if isinstance(input_buf, int) or isinstance(input_buf, long):
+		if isinstance(input_buf, int) or isinstance(input_buf, numbers.Integral):
 			return None
 		input_buf = databuffer.DataBuffer(input_buf)
 		output_buf = databuffer.DataBuffer()
 		keys = list(params.keys())
 		param_buf = (core.BNTransformParameter * len(keys))()
+		data = []
 		for i in range(0, len(keys)):
-			data = databuffer.DataBuffer(params[keys[i]])
+			data.append(databuffer.DataBuffer(params[keys[i]]))
 			param_buf[i].name = keys[i]
-			param_buf[i].value = data.handle
+			param_buf[i].value = data[i].handle
 		if not core.BNEncode(self.handle, input_buf.handle, output_buf.handle, param_buf, len(keys)):
 			return None
 		return str(output_buf)

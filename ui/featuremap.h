@@ -6,6 +6,7 @@
 #include <QtWidgets/QMenu>
 #include <QtGui/QPainter>
 #include <QtCore/QRect>
+#include <QtCore/QPointer>
 #include <QtCore/QTimer>
 #include <QtCore/QVector>
 #include <QtWidgets/QWidget>
@@ -25,6 +26,7 @@ class ViewFrame;
 class BINARYNINJAUIAPI FeatureMap: public QWidget, public BinaryNinja::BinaryDataNotification, public DockContextHandler
 {
 	Q_OBJECT
+	Q_INTERFACES(DockContextHandler)
 
 	QImage* m_image = nullptr;
 	QImage* m_staticImage = nullptr;
@@ -53,7 +55,7 @@ class BINARYNINJAUIAPI FeatureMap: public QWidget, public BinaryNinja::BinaryDat
 	{
 		std::mutex m_mutex;
 		bool m_valid;
-		FeatureMap* m_featureMap;
+		QPointer<FeatureMap> m_featureMap;
 
 	public:
 		BackgroundRefresh(FeatureMap* featureMap);
@@ -61,7 +63,7 @@ class BINARYNINJAUIAPI FeatureMap: public QWidget, public BinaryNinja::BinaryDat
 		void abort();
 	};
 
-	BinaryNinja::Ref<BackgroundRefresh> m_backgroundRefresh;
+	BinaryNinja::Ref<BackgroundRefresh> m_backgroundRefresh = nullptr;
 
 public:
 	FeatureMap(ViewFrame* frame, BinaryViewRef data);
@@ -69,10 +71,10 @@ public:
 
 	View* getBinaryDataNavigableView(bool preferGraphView = false);
 	void backgroundRefresh();
-	std::pair<uint64_t, bool> getOffsetForAddress(uint64_t addr);
-	void setCurrentLocation(uint64_t address);
+	std::pair<uint64_t, bool> getLinearOffsetForAddress(uint64_t addr);
 
-	virtual void updateTheme() override;
+	virtual void notifyOffsetChanged(uint64_t offset) override;
+	virtual void notifyThemeChanged() override;
 
 	void renderDataVariable(const BinaryNinja::DataVariable& var, bool ignoreString = false);
 

@@ -24,86 +24,15 @@ import atexit
 import sys
 import ctypes
 from time import gmtime
+import os
 
 
-# 2-3 compatibility
-try:
-	import builtins  # __builtins__ for python2
-except ImportError:
-	pass
-def range(*args):
-	""" A Python2 and Python3 Compatible Range Generator """
-	try:
-		return xrange(*args)
-	except NameError:
-		return builtins.range(*args)
-
-
-def with_metaclass(meta, *bases):
-    """Create a base class with a metaclass."""
-    class metaclass(type):
-        def __new__(cls, name, this_bases, d):
-            return meta(name, bases, d)
-
-        @classmethod
-        def __prepare__(cls, name, this_bases):
-            return meta.__prepare__(name, bases)
-    return type.__new__(metaclass, 'temporary_class', (), {})
-
-
-try:
-	long = long
-except NameError:
-	long = int
-
-
-def cstr(arg):
-	if isinstance(arg, bytes) or arg is None:
-		return arg
-	else:
-		return arg.encode('charmap')
-
-
-def pyNativeStr(arg):
-	if isinstance(arg, str):
-		return arg
-	else:
-		return arg.decode('charmap')
+from binaryninja.compatibility import *
 
 
 # Binary Ninja components
 import binaryninja._binaryninjacore as core
-# __all__ = [
-# 	"enums",
-# 	"databuffer",
-# 	"filemetadata",
-# 	"fileaccessor",
-# 	"binaryview",
-# 	"transform",
-# 	"architecture",
-# 	"basicblock",
-# 	"function",
-# 	"log",
-# 	"lowlevelil",
-# 	"mediumlevelil",
-# 	"types",
-# 	"functionrecognizer",
-# 	"update",
-# 	"plugin",
-# 	"callingconvention",
-# 	"platform",
-# 	"demangle",
-# 	"mainthread",
-# 	"interaction",
-# 	"lineardisassembly",
-# 	"undoaction",
-# 	"highlight",
-# 	"scriptingprovider",
-# 	"pluginmanager",
-# 	"setting",
-# 	"metadata",
-# 	"flowgraph",
-# ]
+
 from binaryninja.enums import *
 from binaryninja.databuffer import *
 from binaryninja.filemetadata import *
@@ -160,34 +89,42 @@ def get_install_directory():
 	return core.BNGetInstallDirectory()
 
 
-_plugin_api_name = "python2"
+_plugin_api_name = "python{}".format(sys.version_info.major)
 
 
 class PluginManagerLoadPluginCallback(object):
-	"""Callback for BNLoadPluginForApi("python2", ...), dynamically loads python plugins."""
+	"""Callback for BNLoadPluginForApi("python{version}", ...), dynamically loads python plugins."""
 	def __init__(self):
 		self.cb = ctypes.CFUNCTYPE(
 			ctypes.c_bool,
 			ctypes.c_char_p,
 			ctypes.c_char_p,
+			ctypes.c_bool,
 			ctypes.c_void_p)(self._load_plugin)
 
-	def _load_plugin(self, repo_path, plugin_path, ctx):
+	def _load_plugin(self, repo_path, plugin_path, force, ctx):
 		try:
+			repo_path = repo_path.decode("utf-8")
+			plugin_path = plugin_path.decode("utf-8")
 			repo = RepositoryManager()[repo_path]
 			plugin = repo[plugin_path]
 
-			if plugin.api != _plugin_api_name:
+			if not force and _plugin_api_name not in plugin.api:
 				raise ValueError("Plugin API name is not " + _plugin_api_name)
 
+			if not force and core.core_platform not in plugin.install_platforms:
+				raise ValueError("Current platform {} ins't in list of valid platforms for this plugin {}".format(
+					core.core_platform, plugin.install_platforms))
 			if not plugin.installed:
 				plugin.installed = True
 
+			plugin_full_path = os.path.join(repo.full_path, plugin.path)
 			if repo.full_path not in sys.path:
 				sys.path.append(repo.full_path)
+			if plugin_full_path not in sys.path:
+				sys.path.append(plugin_full_path)
 
-			__import__(plugin.path)
-			log_info("Successfully loaded plugin: {}/{}: ".format(repo_path, plugin_path))
+			__import__(plugin_path)
 			return True
 		except KeyError:
 			log_error("Failed to find python plugin: {}/{}".format(repo_path, plugin_path))
@@ -226,7 +163,8 @@ def _init_plugins():
 	global _plugin_init
 	if not _plugin_init:
 		core.BNInitCorePlugins()
-		core.BNInitUserPlugins()
+		if not os.environ.get('BN_DISABLE_USER_PLUGINS'):
+			core.BNInitUserPlugins()
 		core.BNInitRepoPlugins()
 	if core.BNIsLicenseValidated():
 		_plugin_init = True
@@ -265,12 +203,12 @@ def core_version():
 
 def core_build_id():
 	"""
-		``core_build_id`` returns a string containing the current build id
+		``core_build_id`` returns a integer containing the current build id
 
 		:return: current build id
-		:rtype: str, or None on failure
+		:rtype: int
 	"""
-	core.BNGetBuildId()
+	return core.BNGetBuildId()
 
 def core_serial():
 	"""
@@ -305,3 +243,13 @@ def core_ui_enabled():
 def core_set_license(licenseData):
 	'''Set the Binary Ninja license data, an alternative to storing a ``license.dat`` file'''
 	core.BNSetLicense(licenseData)
+
+
+def get_memory_usage_info():
+	count = ctypes.c_ulonglong()
+	info = core.BNGetMemoryUsageInfo(count)
+	result = {}
+	for i in range(0, count.value):
+		result[info[i].name] = info[i].value
+	core.BNFreeMemoryUsageInfo(info, count.value)
+	return result

@@ -53,6 +53,7 @@ public:
 
 	DisassemblySettingsRef getSettings();
 
+	virtual void notifyUpdateInProgress(FunctionRef func) override;
 	virtual void onFunctionSelected(FunctionRef func) override;
 	virtual void onHighlightChanged(const HighlightTokenState& highlight) override;
 
@@ -88,6 +89,7 @@ private:
 	BNFunctionGraphType m_graphType;
 	std::set<BNDisassemblyOption> m_options;
 	DisassemblyContainer* m_container;
+	SettingsRef m_settings;
 
 private Q_SLOTS:
 	void viewInHexEditor();

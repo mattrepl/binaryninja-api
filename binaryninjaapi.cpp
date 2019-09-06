@@ -30,6 +30,18 @@ struct WorkerThreadActionContext
 };
 
 
+void BinaryNinja::DisablePlugins()
+{
+	BNDisablePlugins();
+}
+
+
+bool BinaryNinja::IsPluginsEnabled()
+{
+	return BNIsPluginsEnabled();
+}
+
+
 void BinaryNinja::InitCorePlugins()
 {
 	BNInitCorePlugins();
@@ -353,5 +365,31 @@ string BinaryNinja::GetUniqueIdentifierString()
 	char* str = BNGetUniqueIdentifierString();
 	string result = str;
 	BNFreeString(str);
+	return result;
+}
+
+
+map<string, uint64_t> BinaryNinja::GetMemoryUsageInfo()
+{
+	size_t count;
+	BNMemoryUsageInfo* info = BNGetMemoryUsageInfo(&count);
+
+	map<string, uint64_t> result;
+	for (size_t i = 0; i < count; i++)
+		result[info[i].name] = info[i].value;
+	BNFreeMemoryUsageInfo(info, count);
+	return result;
+}
+
+
+vector<string> BinaryNinja::GetRegisteredPluginLoaders()
+{
+	size_t count = 0;
+	char** loaders = BNGetRegisteredPluginLoaders(&count);
+	vector<string> result;
+	result.reserve(count);
+	for (size_t i = 0; i < count; i++)
+		result.push_back(loaders[i]);
+	BNFreeRegisteredPluginLoadersList(loaders, count);
 	return result;
 }

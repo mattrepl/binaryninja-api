@@ -135,7 +135,7 @@ class BinaryViewTestBuilder(Builder):
         bblist = []
         for func in self.bv.functions:
             for bb in func.basic_blocks:
-                bblist.append("basic block {} start: ".format(str(bb)) + hex(bb.start) + ' end: ' + hex(bb.end) + ' undetermined outgoing edges: ' + str(bb.has_undetermined_outgoing_edges))
+                bblist.append("basic block {} start: ".format(str(bb)) + hex(bb.start) + ' end: ' + hex(bb.end) + ' undetermined outgoing edges: ' + str(bb.has_undetermined_outgoing_edges) + ' incoming edges: ' + str(bb.incoming_edges) + ' outgoing edges: ' + str(bb.outgoing_edges))
                 for anno in func.get_block_annotations(bb.start):
                     bblist.append("basic block {} function annotation: ".format(str(bb)) + str(anno))
                 bblist.append("basic block {} test get self: ".format(str(bb)) + str(func.get_basic_block_at(bb.start)))
@@ -381,9 +381,9 @@ class BinaryViewTestBuilder(Builder):
         retinfo = []
         for func in self.bv.functions:
             for bb in func:
-                for dom in bb.dominators:
+                for dom in sorted(bb.dominators, key=lambda x: x.start):
                     retinfo.append("Dominator: %x of %x" % (dom.start, bb.start))
-                for pdom in bb.post_dominators:
+                for pdom in sorted(bb.post_dominators, key=lambda x: x.start):
                     retinfo.append("PostDominator: %x of %x" % (pdom.start, bb.start))
         return fixOutput(retinfo)
 
@@ -860,5 +860,49 @@ class VerifyBuilder(Builder):
             del bv
             os.unlink(temp_name)
             return [str(functions == bndb_functions and comments == bndb_comments)]
+        finally:
+            self.delete_package("helloworld")
+
+    def test_memory_leaks(self):
+        """Detected memory leaks during analysis"""
+        # This test will attempt to detect object leaks during headless analysis
+        file_name = self.unpackage_file("helloworld")
+        try:
+            # Open the binary once and let any persistent structures be created (typically types)
+            bv = binja.BinaryViewType['ELF'].open(file_name)
+            bv.update_analysis_and_wait()
+            # Hold on to a graph reference while tearing down the binary view. This will keep a reference
+            # in the core. If we directly free the view, the teardown will happen in a worker thread and
+            # we will not be able to get a reliable object count. By keeping a reference in a different
+            # object in the core, the teardown will occur immediately upon freeing the other object.
+            graph = bv.functions[0].create_graph()
+            bv.file.close()
+            del bv
+            import gc
+            gc.collect()
+            del graph
+            gc.collect()
+
+            initial_object_counts = binja.get_memory_usage_info()
+
+            # Analyze the binary again
+            bv = binja.BinaryViewType['ELF'].open(file_name)
+            bv.update_analysis_and_wait()
+            graph = bv.functions[0].create_graph()
+            bv.file.close()
+            del bv
+            gc.collect()
+            del graph
+            gc.collect()
+
+            # Capture final object count
+            final_object_counts = binja.get_memory_usage_info()
+
+            # Check for leaks
+            ok = True
+            for i in initial_object_counts.keys():
+                if final_object_counts[i] > initial_object_counts[i]:
+                    ok = False
+            return ok
         finally:
             self.delete_package("helloworld")

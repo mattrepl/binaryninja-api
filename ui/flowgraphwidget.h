@@ -89,7 +89,7 @@ class BINARYNINJAUIAPI FlowGraphWidget: public QAbstractScrollArea, public View,
 
 	bool m_scrollMode;
 	int m_scrollBaseX, m_scrollBaseY;
-	bool m_mouseSelectMode;
+	bool m_mouseSelectMode = false;
 
 	FlowGraphNodeRef m_selectedNode, m_selectedEdgeSource;
 	bool m_selectedEdgeIncoming = false;
@@ -113,6 +113,9 @@ class BINARYNINJAUIAPI FlowGraphWidget: public QAbstractScrollArea, public View,
 	bool m_isPreview;
 	QPointF m_previewPos;
 	QTimer* m_hoverTimer;
+
+	FlowGraphRef m_recenterWithGraph;
+	int m_recenterXofs, m_recenterYofs;
 
 	static int m_layoutCompleteEventType;
 	static int m_updateCompleteEventType;
@@ -153,7 +156,8 @@ protected:
 
 	void navigateToAddress(uint64_t addr);
 
-	void setGraphInternal(FlowGraphRef graph, FlowGraphHistoryEntry* entry, bool useAddr, uint64_t addr, bool notify);
+	void setGraphInternal(FlowGraphRef graph, FlowGraphHistoryEntry* entry, bool useAddr, uint64_t addr, bool notify,
+		bool recenterWithPreviousGraph);
 
 	void up(bool selecting, size_t count = 1);
 	void down(bool selecting, size_t count = 1);
@@ -177,6 +181,7 @@ public:
 
 	virtual void OnAnalysisFunctionUpdated(BinaryNinja::BinaryView* data, BinaryNinja::Function* func) override;
 	virtual void OnAnalysisFunctionUpdateRequested(BinaryNinja::BinaryView* data, BinaryNinja::Function* func) override;
+	virtual void OnDataMetadataUpdated(BinaryNinja::BinaryView* data, uint64_t offset) override;
 
 	void setInitialGraph(FlowGraphRef graph);
 	void setInitialGraph(FlowGraphRef graph, uint64_t addr);
@@ -184,6 +189,7 @@ public:
 	void setGraph(FlowGraphRef graph);
 	void setGraph(FlowGraphRef graph, uint64_t addr);
 	void setGraph(FlowGraphRef graph, FlowGraphHistoryEntry* entry);
+	void setRelatedGraph(FlowGraphRef graph);
 	void updateToGraph(FlowGraphRef graph);
 	virtual void updateFonts() override;
 
@@ -249,6 +255,7 @@ public:
 
 	void setHighlightToken(const HighlightTokenState& state, bool notify = true);
 
+	virtual void notifyUpdateInProgress(FunctionRef func);
 	virtual void onFunctionSelected(FunctionRef func);
 	virtual void onHighlightChanged(const HighlightTokenState& highlight);
 
@@ -276,10 +283,17 @@ private Q_SLOTS:
 	void undefineFunc();
 	void createFunc();
 	void changeType();
+	void inferStructureType();
 	void comment();
+	void addUserXref();
 	void functionComment();
 	void commentAccepted();
 	void functionCommentAccepted();
+	void bookmarkAddress();
+	void unbookmarkAddress();
+	void tagAddress();
+	void tagAddressAccepted(TagTypeRef tt);
+	void manageAddressTags();
 
 	void convertToNop();
 	void alwaysBranch();

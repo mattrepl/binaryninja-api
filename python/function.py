@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (c) 2015-2019 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,6 +23,7 @@ from __future__ import absolute_import
 import threading
 import traceback
 import ctypes
+import numbers
 
 # Binary Ninja components
 import binaryninja
@@ -41,65 +43,112 @@ from binaryninja import range
 
 class LookupTableEntry(object):
 	def __init__(self, from_values, to_value):
-		self.from_values = from_values
-		self.to_value = to_value
+		self._from_values = from_values
+		self._to_value = to_value
 
 	def __repr__(self):
 		return "[%s] -> %#x" % (', '.join(["%#x" % i for i in self.from_values]), self.to_value)
 
+	@property
+	def from_values(self):
+		""" """
+		return self._from_values
+
+	@from_values.setter
+	def from_values(self, value):
+		""" """
+		self._from_values = value
+
+	@property
+	def to_value(self):
+		""" """
+		return self._to_value
+
+	@to_value.setter
+	def to_value(self, value):
+		""" """
+		self._to_value = value
+
 
 class RegisterValue(object):
 	def __init__(self, arch = None, value = None, confidence = types.max_confidence):
-		self.is_constant = False
+		self._is_constant = False
 		if value is None:
-			self.type = RegisterValueType.UndeterminedValue
+			self._type = RegisterValueType.UndeterminedValue
+			self._value = None
+			self._arch = None
+			self._reg = None
+			self._is_constant = False
+			self._offset = None
 		else:
-			self.type = RegisterValueType(value.state)
+			self._type = RegisterValueType(value.state)
 			if value.state == RegisterValueType.EntryValue:
-				self.arch = arch
+				self._arch = arch
 				if arch is not None:
-					self.reg = arch.get_reg_name(value.value)
+					self._reg = arch.get_reg_name(value.value)
 				else:
-					self.reg = value.value
+					self._reg = value.value
 			elif (value.state == RegisterValueType.ConstantValue) or (value.state == RegisterValueType.ConstantPointerValue):
-				self.value = value.value
-				self.is_constant = True
+				self._value = value.value
+				self._is_constant = True
 			elif value.state == RegisterValueType.StackFrameOffset:
-				self.offset = value.value
+				self._offset = value.value
 			elif value.state == RegisterValueType.ImportedAddressValue:
-				self.value = value.value
-		self.confidence = confidence
+				self._value = value.value
+		self._confidence = confidence
 
 	def __repr__(self):
-		if self.type == RegisterValueType.EntryValue:
-			return "<entry %s>" % self.reg
-		if self.type == RegisterValueType.ConstantValue:
-			return "<const %#x>" % self.value
-		if self.type == RegisterValueType.ConstantPointerValue:
-			return "<const ptr %#x>" % self.value
-		if self.type == RegisterValueType.StackFrameOffset:
-			return "<stack frame offset %#x>" % self.offset
-		if self.type == RegisterValueType.ReturnAddressValue:
+		if self._type == RegisterValueType.EntryValue:
+			return "<entry %s>" % self._reg
+		if self._type == RegisterValueType.ConstantValue:
+			return "<const %#x>" % self._value
+		if self._type == RegisterValueType.ConstantPointerValue:
+			return "<const ptr %#x>" % self._value
+		if self._type == RegisterValueType.StackFrameOffset:
+			return "<stack frame offset %#x>" % self._offset
+		if self._type == RegisterValueType.ReturnAddressValue:
 			return "<return address>"
-		if self.type == RegisterValueType.ImportedAddressValue:
-			return "<imported address from entry %#x>" % self.value
+		if self._type == RegisterValueType.ImportedAddressValue:
+			return "<imported address from entry %#x>" % self._value
 		return "<undetermined>"
+
+	def __hash__(self):
+			if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue]:
+				return hash(self._value)
+			elif self.type == RegisterValueType.EntryValue:
+				return hash(self._reg)
+			elif self._type == RegisterValueType.StackFrameOffset:
+				return hash(self._offset)
+
+	def __eq__(self, other):
+			if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and isinstance(other, numbers.Integral):
+				return self._value == other
+			elif self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and hasattr(other, 'type') and other.type == self._type:
+				return self._value == other.value
+			elif self._type == RegisterValueType.EntryValue and hasattr(other, "type") and other.type == self._type:
+				return self._reg == other.reg
+			elif self._type == RegisterValueType.StackFrameOffset and hasattr(other, 'type') and other.type == self._type:
+				return self._offset == other.offset
+			elif self._type == RegisterValueType.StackFrameOffset and isinstance(other, numbers.Integral):
+				return self._offset == other
+			else:
+				raise TypeError("'%s' is not valid for comparison to '%s'" % (other, self))
 
 	def _to_api_object(self):
 		result = core.BNRegisterValue()
-		result.state = self.type
-		result.value = 0
-		if self.type == RegisterValueType.EntryValue:
-			if self.arch is not None:
-				result.value = self.arch.get_reg_index(self.reg)
+		result.type = self._type
+		result._value = 0
+		if self._type == RegisterValueType.EntryValue:
+			if self._arch is not None:
+				result._value = self._arch.get_reg_index(self._reg)
 			else:
-				result.value = self.reg
-		elif (self.type == RegisterValueType.ConstantValue) or (self.type == RegisterValueType.ConstantPointerValue):
-			result.value = self.value
-		elif self.type == RegisterValueType.StackFrameOffset:
-			result.value = self.offset
-		elif self.type == RegisterValueType.ImportedAddressValue:
-			result.value = self.value
+				result._value = self._reg
+		elif (self._type == RegisterValueType.ConstantValue) or (self._type == RegisterValueType.ConstantPointerValue):
+			result._value = self._value
+		elif self._type == RegisterValueType.StackFrameOffset:
+			result._value = self._offset
+		elif self._type == RegisterValueType.ImportedAddressValue:
+			result._value = self._value
 		return result
 
 	@classmethod
@@ -109,74 +158,139 @@ class RegisterValue(object):
 	@classmethod
 	def entry_value(self, arch, reg):
 		result = RegisterValue()
-		result.type = RegisterValueType.EntryValue
-		result.arch = arch
-		result.reg = reg
+		result._type = RegisterValueType.EntryValue
+		result._arch = arch
+		result._reg = reg
 		return result
 
 	@classmethod
 	def constant(self, value):
 		result = RegisterValue()
-		result.type = RegisterValueType.ConstantValue
-		result.value = value
-		result.is_constant = True
+		result._type = RegisterValueType.ConstantValue
+		result._value = value
+		result._is_constant = True
 		return result
 
 	@classmethod
 	def constant_ptr(self, value):
 		result = RegisterValue()
-		result.type = RegisterValueType.ConstantPointerValue
-		result.value = value
-		result.is_constant = True
+		result._type = RegisterValueType.ConstantPointerValue
+		result._value = value
+		result._is_constant = True
 		return result
 
 	@classmethod
 	def stack_frame_offset(self, offset):
 		result = RegisterValue()
-		result.type = RegisterValueType.StackFrameOffset
-		result.offset = offset
+		result._type = RegisterValueType.StackFrameOffset
+		result._offset = offset
 		return result
 
 	@classmethod
 	def imported_address(self, value):
 		result = RegisterValue()
-		result.type = RegisterValueType.ImportedAddressValue
-		result.value = value
+		result._type = RegisterValueType.ImportedAddressValue
+		result._value = value
 		return result
 
 	@classmethod
 	def return_address(self):
 		result = RegisterValue()
-		result.type = RegisterValueType.ReturnAddressValue
+		result._type = RegisterValueType.ReturnAddressValue
 		return result
+
+	@property
+	def is_constant(self):
+		"""Boolean for whether the RegisterValue is known to be constant (read-only)"""
+		return self._is_constant
+
+	@property
+	def type(self):
+		""":class:`~enums.RegisterValueType` (read-only)"""
+		return self._type
+
+	@property
+	def arch(self):
+		"""Architecture where it exists, None otherwise (read-only)"""
+		return self._arch
+
+	@property
+	def reg(self):
+		"""Register where the Architecture exists, None otherwise (read-only)"""
+		return self._reg
+
+	@property
+	def value(self):
+		"""Value where it exists, None otherwise (read-only)"""
+		return self._value
+
+	@property
+	def offset(self):
+		"""Offset where it exists, None otherwise (read-only)"""
+		return self._offset
+
+	@property
+	def confidence(self):
+		"""Confidence where it exists, None otherwise (read-only)"""
+		return self._confidence
 
 
 class ValueRange(object):
 	def __init__(self, start, end, step):
-		self.start = start
-		self.end = end
-		self.step = step
+		self._start = start
+		self._end = end
+		self._step = step
 
 	def __repr__(self):
 		if self.step == 1:
 			return "<range: %#x to %#x>" % (self.start, self.end)
 		return "<range: %#x to %#x, step %#x>" % (self.start, self.end, self.step)
 
+	@property
+	def start(self):
+		""" """
+		return self._start
+
+	@start.setter
+	def start(self, value):
+		""" """
+		self._start = value
+
+	@property
+	def end(self):
+		""" """
+		return self._end
+
+	@end.setter
+	def end(self, value):
+		""" """
+		self._end = value
+
+	@property
+	def step(self):
+		""" """
+		return self._step
+
+	@step.setter
+	def step(self, value):
+		""" """
+		self._step = value
+
 
 class PossibleValueSet(object):
 	def __init__(self, arch, value):
-		self.type = RegisterValueType(value.state)
+		self._type = RegisterValueType(value.state)
 		if value.state == RegisterValueType.EntryValue:
-			self.reg = arch.get_reg_name(value.value)
+			self._reg = arch.get_reg_name(value.value)
 		elif value.state == RegisterValueType.ConstantValue:
-			self.value = value.value
+			self._value = value.value
 		elif value.state == RegisterValueType.ConstantPointerValue:
-			self.value = value.value
+			self._value = value.value
 		elif value.state == RegisterValueType.StackFrameOffset:
-			self.offset = value.value
+			self._offset = value.value
 		elif value.state == RegisterValueType.SignedRangeValue:
-			self.offset = value.value
-			self.ranges = []
+			self._offset = value.value
+			self._ranges = []
 			for i in range(0, value.count):
 				start = value.ranges[i].start
 				end = value.ranges[i].end
@@ -185,86 +299,228 @@ class PossibleValueSet(object):
 					start |= ~((1 << 63) - 1)
 				if end & (1 << 63):
 					end |= ~((1 << 63) - 1)
-				self.ranges.append(ValueRange(start, end, step))
+				self._ranges.append(ValueRange(start, end, step))
 		elif value.state == RegisterValueType.UnsignedRangeValue:
-			self.offset = value.value
-			self.ranges = []
+			self._offset = value.value
+			self._ranges = []
 			for i in range(0, value.count):
 				start = value.ranges[i].start
 				end = value.ranges[i].end
 				step = value.ranges[i].step
-				self.ranges.append(ValueRange(start, end, step))
+				self._ranges.append(ValueRange(start, end, step))
 		elif value.state == RegisterValueType.LookupTableValue:
-			self.table = []
-			self.mapping = {}
+			self._table = []
+			self._mapping = {}
 			for i in range(0, value.count):
 				from_list = []
 				for j in range(0, value.table[i].fromCount):
 					from_list.append(value.table[i].fromValues[j])
-					self.mapping[value.table[i].fromValues[j]] = value.table[i].toValue
-				self.table.append(LookupTableEntry(from_list, value.table[i].toValue))
+					self._mapping[value.table[i].fromValues[j]] = value.table[i].toValue
+				self._table.append(LookupTableEntry(from_list, value.table[i].toValue))
 		elif (value.state == RegisterValueType.InSetOfValues) or (value.state == RegisterValueType.NotInSetOfValues):
-			self.values = set()
+			self._values = set()
 			for i in range(0, value.count):
-				self.values.add(value.valueSet[i])
+				self._values.add(value.valueSet[i])
 
 	def __repr__(self):
-		if self.type == RegisterValueType.EntryValue:
+		if self._type == RegisterValueType.EntryValue:
 			return "<entry %s>" % self.reg
-		if self.type == RegisterValueType.ConstantValue:
+		if self._type == RegisterValueType.ConstantValue:
 			return "<const %#x>" % self.value
-		if self.type == RegisterValueType.ConstantPointerValue:
+		if self._type == RegisterValueType.ConstantPointerValue:
 			return "<const ptr %#x>" % self.value
-		if self.type == RegisterValueType.StackFrameOffset:
+		if self._type == RegisterValueType.StackFrameOffset:
 			return "<stack frame offset %#x>" % self.offset
-		if self.type == RegisterValueType.SignedRangeValue:
+		if self._type == RegisterValueType.SignedRangeValue:
 			return "<signed ranges: %s>" % repr(self.ranges)
-		if self.type == RegisterValueType.UnsignedRangeValue:
+		if self._type == RegisterValueType.UnsignedRangeValue:
 			return "<unsigned ranges: %s>" % repr(self.ranges)
-		if self.type == RegisterValueType.LookupTableValue:
+		if self._type == RegisterValueType.LookupTableValue:
 			return "<table: %s>" % ', '.join([repr(i) for i in self.table])
-		if self.type == RegisterValueType.InSetOfValues:
+		if self._type == RegisterValueType.InSetOfValues:
 			return "<in set(%s)>" % '[{}]'.format(', '.join(hex(i) for i in sorted(self.values)))
-		if self.type == RegisterValueType.NotInSetOfValues:
+		if self._type == RegisterValueType.NotInSetOfValues:
 			return "<not in set(%s)>" % '[{}]'.format(', '.join(hex(i) for i in sorted(self.values)))
-		if self.type == RegisterValueType.ReturnAddressValue:
+		if self._type == RegisterValueType.ReturnAddressValue:
 			return "<return address>"
 		return "<undetermined>"
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		""" """
+		self._type = value
+
+	@property
+	def reg(self):
+		""" """
+		return self._reg
+
+	@reg.setter
+	def reg(self, value):
+		""" """
+		self._reg = value
+
+	@property
+	def value(self):
+		""" """
+		return self._value
+
+	@value.setter
+	def value(self, value):
+		""" """
+		self._value = value
+
+	@property
+	def offset(self):
+		""" """
+		return self._offset
+
+	@offset.setter
+	def offset(self, value):
+		""" """
+		self._offset = value
+
+	@property
+	def ranges(self):
+		""" """
+		return self._ranges
+
+	@ranges.setter
+	def ranges(self, value):
+		""" """
+		self._ranges = value
+
+	@property
+	def table(self):
+		""" """
+		return self._table
+
+	@table.setter
+	def table(self, value):
+		""" """
+		self._table = value
+
+	@property
+	def mapping(self):
+		""" """
+		return self._mapping
+
+	@mapping.setter
+	def mapping(self, value):
+		""" """
+		self._mapping = value
+
+	@property
+	def values(self):
+		""" """
+		return self._values
+
+	@values.setter
+	def values(self, value):
+		""" """
+		self._values = value
+
+	def __eq__(self, other):
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and isinstance(other, numbers.Integral):
+			return self.value == other
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and hasattr(other, 'type') and other.type == self.type:
+			return self.value == other.value
+		else:
+			return self == other
 
 
 class StackVariableReference(object):
 	def __init__(self, src_operand, t, name, var, ref_ofs, size):
-		self.source_operand = src_operand
-		self.type = t
-		self.name = name
-		self.var = var
-		self.referenced_offset = ref_ofs
-		self.size = size
-		if self.source_operand == 0xffffffff:
-			self.source_operand = None
+		self._source_operand = src_operand
+		self._type = t
+		self._name = name
+		self._var = var
+		self._referenced_offset = ref_ofs
+		self._size = size
+		if self._source_operand == 0xffffffff:
+			self._source_operand = None
 
 	def __repr__(self):
-		if self.source_operand is None:
-			if self.referenced_offset != self.var.storage:
-				return "<ref to %s%+#x>" % (self.name, self.referenced_offset - self.var.storage)
-			return "<ref to %s>" % self.name
-		if self.referenced_offset != self.var.storage:
-			return "<operand %d ref to %s%+#x>" % (self.source_operand, self.name, self.var.storage)
-		return "<operand %d ref to %s>" % (self.source_operand, self.name)
+		if self._source_operand is None:
+			if self._referenced_offset != self._var.storage:
+				return "<ref to %s%+#x>" % (self._name, self._referenced_offset - self._var.storage)
+			return "<ref to %s>" % self._name
+		if self._referenced_offset != self._var.storage:
+			return "<operand %d ref to %s%+#x>" % (self._source_operand, self._name, self._var.storage)
+		return "<operand %d ref to %s>" % (self._source_operand, self._name)
+
+	@property
+	def source_operand(self):
+		""" """
+		return self._source_operand
+
+	@source_operand.setter
+	def source_operand(self, value):
+		self._source_operand = value
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		self._type = value
+
+	@property
+	def name(self):
+		""" """
+		return self._name
+
+	@name.setter
+	def name(self, value):
+		self._name = value
+
+	@property
+	def var(self):
+		""" """
+		return self._var
+
+	@var.setter
+	def var(self, value):
+		self._var = value
+
+	@property
+	def referenced_offset(self):
+		""" """
+		return self._referenced_offset
+
+	@referenced_offset.setter
+	def referenced_offset(self, value):
+		self._referenced_offset = value
+
+	@property
+	def size(self):
+		""" """
+		return self._size
+
+	@size.setter
+	def size(self, value):
+		self._size = value
 
 
 class Variable(object):
 	def __init__(self, func, source_type, index, storage, name = None, var_type = None):
-		self.function = func
-		self.source_type = VariableSourceType(source_type)
-		self.index = index
-		self.storage = storage
+		self._function = func
+		self._source_type = VariableSourceType(source_type)
+		self._index = index
+		self._storage = storage
 
 		var = core.BNVariable()
 		var.type = source_type
 		var.index = index
 		var.storage = storage
-		self.identifier = core.BNToVariableIdentifier(var)
+		self._identifier = core.BNToVariableIdentifier(var)
 
 		if func is not None:
 			if name is None:
@@ -276,8 +532,71 @@ class Variable(object):
 				else:
 					var_type = None
 
-		self.name = name
-		self.type = var_type
+		self._name = name
+		self._type = var_type
+
+	@property
+	def function(self):
+		""" """
+		return self._function
+
+	@function.setter
+	def function(self, value):
+		self._function = value
+
+	@property
+	def source_type(self):
+		""" """
+		return self._source_type
+
+	@source_type.setter
+	def source_type(self, value):
+		self._source_type = value
+
+	@property
+	def index(self):
+		""" """
+		return self._index
+
+	@index.setter
+	def index(self, value):
+		self._index = value
+
+	@property
+	def storage(self):
+		""" """
+		return self._storage
+
+	@storage.setter
+	def storage(self, value):
+		self._storage = value
+
+	@property
+	def identifier(self):
+		""" """
+		return self._identifier
+
+	@identifier.setter
+	def identifier(self, value):
+		self._identifier = value
+
+	@property
+	def name(self):
+		""" """
+		return self._name
+
+	@name.setter
+	def name(self, value):
+		self._name = value
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		self._type = value
 
 	@classmethod
 	def from_identifier(self, func, identifier, name = None, var_type = None):
@@ -285,9 +604,9 @@ class Variable(object):
 		return Variable(func, VariableSourceType(var.type), var.index, var.storage, name, var_type)
 
 	def __repr__(self):
-		if self.type is None:
+		if self._type is None:
 			return "<var %s>" % self.name
-		return "<var %s %s%s>" % (self.type.get_string_before_name(), self.name, self.type.get_string_after_name())
+		return "<var %s %s%s>" % (self._type.get_string_before_name(), self.name, self._type.get_string_after_name())
 
 	def __str__(self):
 		return self.name
@@ -303,10 +622,10 @@ class Variable(object):
 
 class ConstantReference(object):
 	def __init__(self, val, size, ptr, intermediate):
-		self.value = val
-		self.size = size
-		self.pointer = ptr
-		self.intermediate = intermediate
+		self._value = val
+		self._size = size
+		self._pointer = ptr
+		self._intermediate = intermediate
 
 	def __repr__(self):
 		if self.pointer:
@@ -314,6 +633,43 @@ class ConstantReference(object):
 		if self.size == 0:
 			return "<constant %#x>" % self.value
 		return "<constant %#x size %d>" % (self.value, self.size)
+
+	@property
+	def value(self):
+		""" """
+		return self._value
+
+	@value.setter
+	def value(self, value):
+		self._value = value
+
+	@property
+	def size(self):
+		""" """
+		return self._size
+
+	@size.setter
+	def size(self, value):
+		self._size = value
+
+	@property
+	def pointer(self):
+		""" """
+		return self._pointer
+
+	@pointer.setter
+	def pointer(self, value):
+		self._pointer = value
+
+	@property
+	def intermediate(self):
+		""" """
+		return self._intermediate
+
+	@intermediate.setter
+	def intermediate(self, value):
+		self._intermediate = value
+
 
 
 class IndirectBranchInfo(object):
@@ -330,24 +686,42 @@ class IndirectBranchInfo(object):
 
 class ParameterVariables(object):
 	def __init__(self, var_list, confidence = types.max_confidence):
-		self.vars = var_list
-		self.confidence = confidence
+		self._vars = var_list
+		self._confidence = confidence
 
 	def __repr__(self):
-		return repr(self.vars)
+		return repr(self._vars)
 
 	def __iter__(self):
-		for var in self.vars:
+		for var in self._vars:
 			yield var
 
 	def __getitem__(self, idx):
-		return self.vars[idx]
+		return self._vars[idx]
 
 	def __len__(self):
-		return len(self.vars)
+		return len(self._vars)
 
 	def with_confidence(self, confidence):
-		return ParameterVariables(list(self.vars), confidence = confidence)
+		return ParameterVariables(list(self._vars), confidence = confidence)
+
+	@property
+	def vars(self):
+		""" """
+		return self._vars
+
+	@vars.setter
+	def vars(self, value):
+		self._vars = value
+
+	@property
+	def confidence(self):
+		""" """
+		return self._confidence
+
+	@confidence.setter
+	def confidence(self, value):
+		self._confidence = value
 
 
 class _FunctionAssociatedDataStore(associateddatastore._AssociatedDataStore):
@@ -479,8 +853,23 @@ class Function(object):
 
 	@property
 	def start(self):
-		"""Function start (read-only)"""
+		"""Function start address (read-only)"""
 		return core.BNGetFunctionStart(self.handle)
+
+	@property
+	def total_bytes(self):
+		"""Total bytes of a function calculated by summing each basic_block. Because basic blocks can overlap and have gaps between them this may or may not be equivalent to a .size property."""
+		return sum(map(len, self))
+
+	@property
+	def highest_address(self):
+		"The highest virtual address contained in a function."""
+		return max(self, key=lambda block:block.end).end - 1
+
+	@property
+	def lowest_address(self):
+		"""The lowest virtual address contained in a function."""
+		return min(self, key=lambda block:block.start).start
 
 	@property
 	def symbol(self):
@@ -542,6 +931,255 @@ class Function(object):
 			result[addrs[i]] = self.get_comment_at(addrs[i])
 		core.BNFreeAddressList(addrs)
 		return result
+
+	def create_tag(self, type, data):
+		"""
+		``create_tag`` creates a new Tag object but does not add it anywhere
+
+		:param TagType type: The Tag Type for this Tag
+		:param str data: Additional data for the Tag
+		:return The created Tag
+		:rtype Tag
+		:Example:
+
+			>>> tt = bv.tag_types["Crabby Functions"]
+			>>> tag = current_function.create_tag(tt, "Get Crabbed")
+			>>> current_function.add_user_address_tag(here, tag)
+			>>>
+		"""
+		return self.view.create_tag(type, data)
+
+	@property
+	def address_tags(self):
+		"""
+		``address_tags`` gets a list of all address Tags in the function.
+		Tags are returned as a list of (arch, address, Tag) tuples.
+
+		:type [(Architecture, int, Tag)]
+		"""
+		count = ctypes.c_ulonglong()
+		tags = core.BNGetAddressTagReferences(self.handle, count)
+		result = []
+		for i in range(0, count.value):
+			arch = binaryninja.architecture.CoreArchitecture(tags[i].arch)
+			tag = binaryninja.binaryview.Tag(core.BNNewTagReference(tags[i].tag))
+			result.append((arch, tags[i].addr, tag))
+		core.BNFreeTagReferences(tags, count.value)
+		return result
+
+	def get_address_tags_at(self, addr, arch=None):
+		"""
+		``get_address_tags_at`` gets a list of all Tags in the function at a given address.
+
+		:param int addr: Address to get tags at
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:return A list of Tags
+		:rtype [Tag]
+		"""
+		if arch is None:
+			arch = self.arch
+		count = ctypes.c_ulonglong()
+		tags = core.BNGetAddressTags(self.handle, arch.handle, addr, count)
+		result = []
+		for i in range(0, count.value):
+			result.append(binaryninja.binaryview.Tag(core.BNNewTagReference(tags[i])))
+		core.BNFreeTagList(tags, count.value)
+		return result
+
+	def add_user_address_tag(self, addr, tag, arch=None):
+		"""
+		``add_user_address_tag`` adds an already-created Tag object at a given address.
+		Since this adds a user tag, it will be added to the current undo buffer.
+
+		:param int addr: Address at which to add the tag
+		:param Tag tag: Tag object to be added
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:rtype None
+		"""
+		if arch is None:
+			arch = self.arch
+		core.BNAddUserAddressTag(self.handle, arch.handle, addr, tag.handle)
+
+	def create_user_address_tag(self, addr, type, data, unique=False, arch=None):
+		"""
+		``create_user_address_tag`` creates and adds a Tag object at a given address.
+		Since this adds a user tag, it will be added to the current undo buffer.
+
+		:param int addr: Address at which to add the tag
+		:param TagType type: Tag Type for the Tag that is created
+		:param str data: Additional data for the Tag
+		:param bool unique: If a tag already exists at this location with this data, don't add another
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:return The created Tag
+		:rtype Tag
+		"""
+		if arch is None:
+			arch = self.arch
+		if unique:
+			tags = self.get_address_tags_at(addr, arch)
+			for tag in tags:
+				if tag.type == type and tag.data == data:
+					return
+
+		tag = self.create_tag(type, data)
+		core.BNAddUserAddressTag(self.handle, arch.handle, addr, tag.handle)
+		return tag
+
+	def remove_user_address_tag(self, addr, tag, arch=None):
+		"""
+		``remove_user_address_tag`` removes a Tag object at a given address.
+		Since this removes a user tag, it will be added to the current undo buffer.
+
+		:param int addr: Address at which to add the tag
+		:param Tag tag: Tag object to be added
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:rtype None
+		"""
+		if arch is None:
+			arch = self.arch
+		core.BNRemoveUserAddressTag(self.handle, arch.handle, addr, tag.handle)
+
+	def add_auto_address_tag(self, addr, tag, arch=None):
+		"""
+		``add_auto_address_tag`` adds an already-created Tag object at a given address.
+
+		:param int addr: Address at which to add the tag
+		:param Tag tag: Tag object to be added
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:rtype None
+		"""
+		if arch is None:
+			arch = self.arch
+		core.BNAddAutoAddressTag(self.handle, arch.handle, addr, tag.handle)
+
+	def create_auto_address_tag(self, addr, type, data, unique=False, arch=None):
+		"""
+		``create_auto_address_tag`` creates and adds a Tag object at a given address.
+
+		:param int addr: Address at which to add the tag
+		:param TagType type: Tag Type for the Tag that is created
+		:param str data: Additional data for the Tag
+		:param bool unique: If a tag already exists at this location with this data, don't add another
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:return The created Tag
+		:rtype Tag
+		"""
+		if arch is None:
+			arch = self.arch
+		if unique:
+			tags = self.get_address_tags_at(addr, arch)
+			for tag in tags:
+				if tag.type == type and tag.data == data:
+					return
+
+		tag = self.create_tag(type, data)
+		core.BNAddAutoAddressTag(self.handle, arch.handle, addr, tag.handle)
+		return tag
+
+	def remove_auto_address_tag(self, addr, tag, arch=None):
+		"""
+		``remove_auto_address_tag`` removes a Tag object at a given address.
+
+		:param int addr: Address at which to add the tag
+		:param Tag tag: Tag object to be added
+		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
+		:rtype None
+		"""
+		if arch is None:
+			arch = self.arch
+		core.BNRemoveAutoAddressTag(self.handle, arch.handle, addr, tag.handle)
+
+	@property
+	def function_tags(self):
+		"""
+		``function_tags`` gets a list of all function Tags for the function.
+
+		:type [Tag]
+		"""
+		count = ctypes.c_ulonglong()
+		tags = core.BNGetFunctionTags(self.handle, count)
+		result = []
+		for i in range(0, count.value):
+			result.append(binaryninja.binaryview.Tag(core.BNNewTagReference(tags[i])))
+		core.BNFreeTagList(tags, count.value)
+		return result
+
+	def add_user_function_tag(self, tag):
+		"""
+		``add_user_function_tag`` adds an already-created Tag object as a function tag.
+		Since this adds a user tag, it will be added to the current undo buffer.
+
+		:param Tag tag: Tag object to be added
+		:rtype None
+		"""
+		core.BNAddUserFunctionTag(self.handle, tag.handle)
+
+	def create_user_function_tag(self, type, data, unique=False):
+		"""
+		``add_user_function_tag`` creates and adds a Tag object as a function tag.
+		Since this adds a user tag, it will be added to the current undo buffer.
+
+		:param TagType type: Tag Type for the Tag that is created
+		:param str data: Additional data for the Tag
+		:param bool unique: If a tag already exists with this data, don't add another
+		:return The created Tag
+		:rtype Tag
+		"""
+		if unique:
+			for tag in self.function_tags:
+				if tag.type == type and tag.data == data:
+					return
+
+		tag = self.create_tag(type, data)
+		core.BNAddUserFunctionTag(self.handle, tag.handle)
+		return tag
+
+	def remove_user_function_tag(self, tag):
+		"""
+		``remove_user_function_tag`` removes a Tag object as a function tag.
+		Since this removes a user tag, it will be added to the current undo buffer.
+
+		:param Tag tag: Tag object to be added
+		:rtype None
+		"""
+		core.BNRemoveUserFunctionTag(self.handle, tag.handle)
+
+	def add_auto_function_tag(self, tag):
+		"""
+		``add_user_function_tag`` adds an already-created Tag object as a function tag.
+
+		:param Tag tag: Tag object to be added
+		:rtype None
+		"""
+		core.BNAddAutoFunctionTag(self.handle, tag.handle)
+
+	def create_auto_function_tag(self, type, data, unique=False):
+		"""
+		``add_user_function_tag`` creates and adds a Tag object as a function tag.
+
+		:param TagType type: Tag Type for the Tag that is created
+		:param str data: Additional data for the Tag
+		:param bool unique: If a tag already exists with this data, don't add another
+		:return The created Tag
+		:rtype Tag
+		"""
+		if unique:
+			for tag in self.function_tags:
+				if tag.type == type and tag.data == data:
+					return
+
+		tag = self.create_tag(type, data)
+		core.BNAddAutoFunctionTag(self.handle, tag.handle)
+		return tag
+
+	def remove_auto_function_tag(self, tag):
+		"""
+		``remove_user_function_tag`` removes a Tag object as a function tag.
+
+		:param Tag tag: Tag object to be added
+		:rtype None
+		"""
+		core.BNRemoveAutoFunctionTag(self.handle, tag.handle)
 
 	@property
 	def low_level_il(self):
@@ -928,6 +1566,49 @@ class Function(object):
 
 		"""
 		core.BNSetCommentForAddress(self.handle, addr, comment)
+
+	def add_user_code_ref(self, from_addr, to_addr, from_arch=None):
+		"""
+		``add_user_code_ref`` places a user-defined cross-reference from the instruction at
+		the given address and architecture to the specified target address. If the specified
+		source instruction is not contained within this function, no action is performed.
+		To remove the reference, use :func:`remove_user_code_ref`.
+
+		:param from_addr int: virtual address of the source instruction
+		:param to_addr int: virtual address of the xref's destination.
+		:param from_arch Architecture: (optional) architecture of the source instruction
+		:rtype: None
+		:Example:
+
+			>>> current_function.add_user_code_ref(here, 0x400000)
+
+		"""
+
+		if from_arch is None:
+			from_arch = self.arch
+
+		core.BNAddUserCodeReference(self.handle, from_arch.handle, from_addr, to_addr)
+
+	def remove_user_code_ref(self, from_addr, to_addr, from_arch=None):
+		"""
+		``remove_user_code_ref`` reomves a user-defined cross-reference.
+		If the given address is not contained within this function, or if there is no
+		such user-defined cross-reference, no action is performed.
+
+		:param from_addr int: virtual address of the source instruction
+		:param to_addr int: virtual address of the xref's destination.
+		:param from_arch Architecture: (optional) architecture of the source instruction
+		:rtype: None
+		:Example:
+
+			>>> current_function.remove_user_code_ref(here, 0x400000)
+
+		"""
+
+		if from_arch is None:
+			from_arch = self.arch
+
+		core.BNRemoveUserCodeReference(self.handle, from_arch.handle, from_addr, to_addr)
 
 	def get_low_level_il_at(self, addr, arch=None):
 		"""
@@ -1601,26 +2282,47 @@ class Function(object):
 		self.view.update_analysis()
 
 	@property
+	def call_sites(self):
+		"""
+		``call_sites`` returns a list of possible call sites.
+		This includes ordinary calls, tail calls, and indirect jumps. Not all of the returned call sites
+		may be true call sites; some may simply be unresolved indirect jumps.
+
+		:return: List of References that represent the sources of possible calls in this function
+		:rtype: list(ReferenceSource)
+		"""
+		count = ctypes.c_ulonglong(0)
+		refs = core.BNGetFunctionCallSites(self.handle, count)
+		result = []
+		for i in range(0, count.value):
+			if refs[i].func:
+				func = binaryninja.function.Function(self, core.BNNewFunctionReference(refs[i].func))
+			else:
+				func = None
+			if refs[i].arch:
+				arch = binaryninja.architecture.CoreArchitecture._from_cache(refs[i].arch)
+			else:
+				arch = None
+			addr = refs[i].addr
+			result.append(binaryninja.architecture.ReferenceSource(func, arch, addr))
+		core.BNFreeCodeReferences(refs, count.value)
+		return result
+
+	@property
 	def callees(self):
 		called = []
-		for bb in self.medium_level_il:
-			for i in bb:
-				if i.operation in (MediumLevelILOperation.MLIL_CALL, MediumLevelILOperation.MLIL_CALL_UNTYPED):
-					if i.dest.value.type == RegisterValueType.ConstantPointerValue:
-						func = self.view.get_function_at(i.dest.value.value, self.platform)
-						if func is not None:
-							called.append(func)
+		for callee_addr in self.callee_addresses:
+			func = self.view.get_function_at(callee_addr, self.platform)
+			if func is not None:
+				called.append(func)
 		return called
 
 	@property
 	def callee_addresses(self):
-		called = []
-		for bb in self.medium_level_il:
-			for i in bb:
-				if i.operation in (MediumLevelILOperation.MLIL_CALL, MediumLevelILOperation.MLIL_CALL_UNTYPED):
-					if i.dest.value.type == RegisterValueType.ConstantPointerValue:
-						called.append(i.dest.value.value)
-		return called
+		result = []
+		for ref in self.call_sites:
+			result.extend(self.view.get_callees(ref.address, ref.function, ref.arch))
+		return result
 
 	@property
 	def callers(self):
@@ -1629,6 +2331,7 @@ class Function(object):
 			if ref.function is not None:
 				functions.append(ref.function)
 		return functions
+
 
 class AdvancedFunctionAnalysisDataRequestor(object):
 	def __init__(self, func = None):
@@ -1660,17 +2363,17 @@ class AdvancedFunctionAnalysisDataRequestor(object):
 
 class DisassemblyTextLine(object):
 	def __init__(self, tokens, address = None, il_instr = None, color = None):
-		self.address = address
-		self.tokens = tokens
-		self.il_instruction = il_instr
+		self._address = address
+		self._tokens = tokens
+		self._il_instruction = il_instr
 		if color is None:
-			self.highlight = highlight.HighlightColor()
+			self._highlight = highlight.HighlightColor()
 		else:
 			if not isinstance(color, HighlightStandardColor) and not isinstance(color, highlight.HighlightColor):
 				raise ValueError("Specified color is not one of HighlightStandardColor, highlight.HighlightColor")
 			if isinstance(color, HighlightStandardColor):
 				color = highlight.HighlightColor(color)
-			self.highlight = color
+			self._highlight = color
 
 	def __str__(self):
 		result = ""
@@ -1682,6 +2385,42 @@ class DisassemblyTextLine(object):
 		if self.address is None:
 			return str(self)
 		return "<%#x: %s>" % (self.address, str(self))
+
+	@property
+	def address(self):
+		""" """
+		return self._address
+
+	@address.setter
+	def address(self, value):
+		self._address = value
+
+	@property
+	def tokens(self):
+		""" """
+		return self._tokens
+
+	@tokens.setter
+	def tokens(self, value):
+		self._tokens = value
+
+	@property
+	def il_instruction(self):
+		""" """
+		return self._il_instruction
+
+	@il_instruction.setter
+	def il_instruction(self, value):
+		self._il_instruction = value
+
+	@property
+	def highlight(self):
+		""" """
+		return self._highlight
+
+	@highlight.setter
+	def highlight(self, value):
+		self._highlight = value
 
 
 class DisassemblySettings(object):
@@ -1723,65 +2462,218 @@ class DisassemblySettings(object):
 
 class RegisterInfo(object):
 	def __init__(self, full_width_reg, size, offset=0, extend=ImplicitRegisterExtend.NoExtend, index=None):
-		self.full_width_reg = full_width_reg
-		self.offset = offset
-		self.size = size
-		self.extend = extend
-		self.index = index
+		self._full_width_reg = full_width_reg
+		self._offset = offset
+		self._size = size
+		self._extend = extend
+		self._index = index
 
 	def __repr__(self):
-		if self.extend == ImplicitRegisterExtend.ZeroExtendToFullWidth:
+		if self._extend == ImplicitRegisterExtend.ZeroExtendToFullWidth:
 			extend = ", zero extend"
-		elif self.extend == ImplicitRegisterExtend.SignExtendToFullWidth:
+		elif self._extend == ImplicitRegisterExtend.SignExtendToFullWidth:
 			extend = ", sign extend"
 		else:
 			extend = ""
-		return "<reg: size %d, offset %d in %s%s>" % (self.size, self.offset, self.full_width_reg, extend)
+		return "<reg: size %d, offset %d in %s%s>" % (self._size, self._offset, self._full_width_reg, extend)
+
+	@property
+	def full_width_reg(self):
+		""" """
+		return self._full_width_reg
+
+	@full_width_reg.setter
+	def full_width_reg(self, value):
+		self._full_width_reg = value
+
+	@property
+	def offset(self):
+		""" """
+		return self._offset
+
+	@offset.setter
+	def offset(self, value):
+		self._offset = value
+
+	@property
+	def size(self):
+		""" """
+		return self._size
+
+	@size.setter
+	def size(self, value):
+		self._size = value
+
+	@property
+	def extend(self):
+		""" """
+		return self._extend
+
+	@extend.setter
+	def extend(self, value):
+		self._extend = value
+
+	@property
+	def index(self):
+		""" """
+		return self._index
+
+	@index.setter
+	def index(self, value):
+		self._index = value
 
 
 class RegisterStackInfo(object):
 	def __init__(self, storage_regs, top_relative_regs, stack_top_reg, index=None):
-		self.storage_regs = storage_regs
-		self.top_relative_regs = top_relative_regs
-		self.stack_top_reg = stack_top_reg
-		self.index = index
+		self._storage_regs = storage_regs
+		self._top_relative_regs = top_relative_regs
+		self._stack_top_reg = stack_top_reg
+		self._index = index
 
 	def __repr__(self):
-		return "<reg stack: %d regs, stack top in %s>" % (len(self.storage_regs), self.stack_top_reg)
+		return "<reg stack: %d regs, stack top in %s>" % (len(self._storage_regs), self._stack_top_reg)
+
+	@property
+	def storage_regs(self):
+		""" """
+		return self._storage_regs
+
+	@storage_regs.setter
+	def storage_regs(self, value):
+		self._storage_regs = value
+
+	@property
+	def top_relative_regs(self):
+		""" """
+		return self._top_relative_regs
+
+	@top_relative_regs.setter
+	def top_relative_regs(self, value):
+		self._top_relative_regs = value
+
+	@property
+	def stack_top_reg(self):
+		""" """
+		return self._stack_top_reg
+
+	@stack_top_reg.setter
+	def stack_top_reg(self, value):
+		self._stack_top_reg = value
+
+	@property
+	def index(self):
+		""" """
+		return self._index
+
+	@index.setter
+	def index(self, value):
+		self._index = value
 
 
 class IntrinsicInput(object):
 	def __init__(self, type_obj, name=""):
-		self.name = name
-		self.type = type_obj
+		self._name = name
+		self._type = type_obj
 
 	def __repr__(self):
-		if len(self.name) == 0:
-			return "<input: %s>" % str(self.type)
-		return "<input: %s %s>" % (str(self.type), self.name)
+		if len(self._name) == 0:
+			return "<input: %s>" % str(self._type)
+		return "<input: %s %s>" % (str(self._type), self._name)
+
+	@property
+	def name(self):
+		""" """
+		return self._name
+
+	@name.setter
+	def name(self, value):
+		self._name = value
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		self._type = value
 
 
 class IntrinsicInfo(object):
 	def __init__(self, inputs, outputs, index=None):
-		self.inputs = inputs
-		self.outputs = outputs
-		self.index = index
+		self._inputs = inputs
+		self._outputs = outputs
+		self._index = index
 
 	def __repr__(self):
-		return "<intrinsic: %s -> %s>" % (repr(self.inputs), repr(self.outputs))
+		return "<intrinsic: %s -> %s>" % (repr(self._inputs), repr(self._outputs))
+
+	@property
+	def inputs(self):
+		""" """
+		return self._inputs
+
+	@inputs.setter
+	def inputs(self, value):
+		self._inputs = value
+
+	@property
+	def outputs(self):
+		""" """
+		return self._outputs
+
+	@outputs.setter
+	def outputs(self, value):
+		self._outputs = value
+
+	@property
+	def index(self):
+		""" """
+		return self._index
+
+	@index.setter
+	def index(self, value):
+		self._index = value
 
 
 class InstructionBranch(object):
 	def __init__(self, branch_type, target = 0, arch = None):
-		self.type = branch_type
-		self.target = target
-		self.arch = arch
+		self._type = branch_type
+		self._target = target
+		self._arch = arch
 
 	def __repr__(self):
-		branch_type = self.type
-		if self.arch is not None:
-			return "<%s: %s@%#x>" % (branch_type.name, self.arch.name, self.target)
-		return "<%s: %#x>" % (branch_type, self.target)
+		branch_type = self._type
+		if self._arch is not None:
+			return "<%s: %s@%#x>" % (branch_type.name, self._arch.name, self._target)
+		return "<%s: %#x>" % (branch_type, self._target)
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		self._type = value
+
+	@property
+	def target(self):
+		""" """
+		return self._target
+
+	@target.setter
+	def target(self, value):
+		self._target = value
+
+	@property
+	def arch(self):
+		""" """
+		return self._arch
+
+	@arch.setter
+	def arch(self, value):
+		self._arch = value
 
 
 class InstructionInfo(object):
@@ -1792,13 +2684,52 @@ class InstructionInfo(object):
 		self.branches = []
 
 	def add_branch(self, branch_type, target = 0, arch = None):
-		self.branches.append(InstructionBranch(branch_type, target, arch))
+		self._branches.append(InstructionBranch(branch_type, target, arch))
+
+	def __len__(self):
+		return self._length
 
 	def __repr__(self):
 		branch_delay = ""
-		if self.branch_delay:
+		if self._branch_delay:
 			branch_delay = ", delay slot"
-		return "<instr: %d bytes%s, %s>" % (self.length, branch_delay, repr(self.branches))
+		return "<instr: %d bytes%s, %s>" % (self._length, branch_delay, repr(self._branches))
+
+	@property
+	def length(self):
+		""" """
+		return self._length
+
+	@length.setter
+	def length(self, value):
+		self._length = value
+
+	@property
+	def arch_transition_by_target_addr(self):
+		""" """
+		return self._arch_transition_by_target_addr
+
+	@arch_transition_by_target_addr.setter
+	def arch_transition_by_target_addr(self, value):
+		self._arch_transition_by_target_addr = value
+
+	@property
+	def branch_delay(self):
+		""" """
+		return self._branch_delay
+
+	@branch_delay.setter
+	def branch_delay(self, value):
+		self._branch_delay = value
+
+	@property
+	def branches(self):
+		""" """
+		return self._branches
+
+	@branches.setter
+	def branches(self, value):
+		self._branches = value
 
 
 class InstructionTextToken(object):
@@ -1841,16 +2772,19 @@ class InstructionTextToken(object):
 
 	"""
 	def __init__(self, token_type, text, value = 0, size = 0, operand = 0xffffffff,
-		context = InstructionTextTokenContext.NoTokenContext, address = 0, confidence = types.max_confidence, typeNames=[]):
-		self.type = InstructionTextTokenType(token_type)
-		self.text = text
-		self.value = value
-		self.size = size
-		self.operand = operand
-		self.context = InstructionTextTokenContext(context)
-		self.confidence = confidence
-		self.address = address
-		self.typeNames = typeNames
+		context = InstructionTextTokenContext.NoTokenContext, address = 0, confidence = types.max_confidence, typeNames=[], width=0):
+		self._type = InstructionTextTokenType(token_type)
+		self._text = text
+		self._value = value
+		self._size = size
+		self._operand = operand
+		self._context = InstructionTextTokenContext(context)
+		self._confidence = confidence
+		self._address = address
+		self._typeNames = typeNames
+		self._width = width
+		if width == 0:
+			self._width = len(self._text)
 
 	@classmethod
 	def get_instruction_lines(cls, tokens, count=0):
@@ -1860,6 +2794,7 @@ class InstructionTextToken(object):
 			for j in range(len(tokens)):
 				result[j].type = tokens[j].type
 				result[j].text = tokens[j].text
+				result[j].width = tokens[j].width
 				result[j].value = tokens[j].value
 				result[j].size = tokens[j].size
 				result[j].operand = tokens[j].operand
@@ -1878,6 +2813,7 @@ class InstructionTextToken(object):
 			text = tokens[j].text
 			if not isinstance(text, str):
 				text = text.decode("charmap")
+			width = tokens[j].width
 			value = tokens[j].value
 			size = tokens[j].size
 			operand = tokens[j].operand
@@ -1890,14 +2826,99 @@ class InstructionTextToken(object):
 					typeNames.append(tokens[j].typeNames[i].decode("charmap"))
 				else:
 					typeNames.append(tokens[j].typeNames[i])
-			result.append(InstructionTextToken(token_type, text, value, size, operand, context, address, confidence, typeNames))
+			result.append(InstructionTextToken(token_type, text, value, size, operand, context, address, confidence, typeNames, width))
 		return result
 
 	def __str__(self):
-		return self.text
+		return self._text
 
 	def __repr__(self):
-		return repr(self.text)
+		return repr(self._text)
+
+	@property
+	def type(self):
+		""" """
+		return self._type
+
+	@type.setter
+	def type(self, value):
+		self._type = value
+
+	@property
+	def text(self):
+		""" """
+		return self._text
+
+	@text.setter
+	def text(self, value):
+		self._text = value
+
+	@property
+	def value(self):
+		""" """
+		return self._value
+
+	@value.setter
+	def value(self, value):
+		self._value = value
+
+	@property
+	def size(self):
+		""" """
+		return self._size
+
+	@size.setter
+	def size(self, value):
+		self._size = value
+
+	@property
+	def operand(self):
+		""" """
+		return self._operand
+
+	@operand.setter
+	def operand(self, value):
+		self._operand = value
+
+	@property
+	def context(self):
+		""" """
+		return self._context
+
+	@context.setter
+	def context(self, value):
+		self._context = value
+
+	@property
+	def confidence(self):
+		""" """
+		return self._confidence
+
+	@confidence.setter
+	def confidence(self, value):
+		self._confidence = value
+
+	@property
+	def address(self):
+		""" """
+		return self._address
+
+	@address.setter
+	def address(self, value):
+		self._address = value
+
+	@property
+	def typeNames(self):
+		""" """
+		return self._typeNames
+
+	@typeNames.setter
+	def typeNames(self, value):
+		self._typeNames = value
+
+	@property
+	def width(self):
+		return self._width
 
 
 class DisassemblyTextRenderer(object):
@@ -1986,13 +3007,22 @@ class DisassemblyTextRenderer(object):
 	def get_instruction_text(self, addr):
 		count = ctypes.c_ulonglong()
 		length = ctypes.c_ulonglong()
-		display_addr = ctypes.c_ulonglong()
-		tokens = ctypes.POINTER(core.BNInstructionTextToken)()
-		if not core.BNGetDisassemblyTextRendererInstructionText(self.handle, addr, length, tokens, count, display_addr):
-			return None, 0, 0
-		result = InstructionTextToken.get_instruction_lines(tokens, count.value)
-		core.BNFreeInstructionText(tokens, count.value)
-		return result, length.value, display_addr.value
+		lines = ctypes.POINTER(core.BNDisassemblyTextLine)()
+		if not core.BNGetDisassemblyTextRendererInstructionText(self.handle, addr, length, lines, count):
+			return None, 0
+		il_function = self.il_function
+		result = []
+		for i in range(0, count.value):
+			addr = lines[i].addr
+			if (lines[i].instrIndex != 0xffffffffffffffff) and (il_function is not None):
+				il_instr = il_function[lines[i].instrIndex]
+			else:
+				il_instr = None
+			color = highlight.HighlightColor._from_core_struct(lines[i].highlight)
+			tokens = InstructionTextToken.get_instruction_lines(lines[i].tokens, lines[i].count)
+			result.append(DisassemblyTextLine(tokens, addr, il_instr, color))
+		core.BNFreeDisassemblyTextLines(lines, count.value)
+		return (result, length.value)
 
 	def get_disassembly_text(self, addr):
 		count = ctypes.c_ulonglong()
@@ -2015,6 +3045,52 @@ class DisassemblyTextRenderer(object):
 			result.append(DisassemblyTextLine(tokens, addr, il_instr, color))
 		core.BNFreeDisassemblyTextLines(lines, count.value)
 		return (result, length.value)
+
+	def post_process_lines(self, addr, length, in_lines):
+		if isinstance(in_lines, str):
+			in_lines = in_lines.split('\n')
+		line_buf = (core.BNDisassemblyTextLine * len(in_lines))()
+		for i in range(0, len(in_lines)):
+			line = in_lines[i]
+			if isinstance(line, str):
+				line = DisassemblyTextLine([InstructionTextToken(InstructionTextTokenType.TextToken, line)])
+			if not isinstance(line, DisassemblyTextLine):
+				line = DisassemblyTextLine(line)
+			if line.address is None:
+				if len(line.tokens) > 0:
+					line_buf[i].addr = line.tokens[0].address
+				else:
+					line_buf[i].addr = 0
+			else:
+				line_buf[i].addr = line.address
+			if line.il_instruction is not None:
+				line_buf[i].instrIndex = line.il_instruction.instr_index
+			else:
+				line_buf[i].instrIndex = 0xffffffffffffffff
+			color = line.highlight
+			if not isinstance(color, HighlightStandardColor) and not isinstance(color, highlight.HighlightColor):
+				raise ValueError("Specified color is not one of HighlightStandardColor, highlight.HighlightColor")
+			if isinstance(color, HighlightStandardColor):
+				color = highlight.HighlightColor(color)
+			line_buf[i].highlight = color._get_core_struct()
+			line_buf[i].count = len(line.tokens)
+			line_buf[i].tokens = InstructionTextToken.get_instruction_lines(line.tokens)
+		count = ctypes.c_ulonglong()
+		lines = ctypes.POINTER(core.BNDisassemblyTextLine)()
+		lines = core.BNPostProcessDisassemblyTextRendererLines(self.handle, addr, length, line_buf, len(in_lines), count)
+		il_function = self.il_function
+		result = []
+		for i in range(0, count.value):
+			addr = lines[i].addr
+			if (lines[i].instrIndex != 0xffffffffffffffff) and (il_function is not None):
+				il_instr = il_function[lines[i].instrIndex]
+			else:
+				il_instr = None
+			color = highlight.HighlightColor._from_core_struct(lines[i].highlight)
+			tokens = InstructionTextToken.get_instruction_lines(lines[i].tokens, lines[i].count)
+			result.append(DisassemblyTextLine(tokens, addr, il_instr, color))
+		core.BNFreeDisassemblyTextLines(lines, count.value)
+		return result
 
 	def reset_deduplicated_comments(self):
 		core.BNResetDisassemblyTextRendererDeduplicatedComments(self.handle)

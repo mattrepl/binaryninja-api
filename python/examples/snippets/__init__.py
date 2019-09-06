@@ -14,6 +14,7 @@ from binaryninja.plugin import PluginCommand, MainThreadActionHandler
 from binaryninja.mainthread import execute_on_main_thread
 from binaryninja.log import (log_info, log_warn, log_alert, log_debug)
 from binaryninjaui import (getMonospaceFont, UIAction, UIActionHandler, Menu)
+import numbers
 
 snippetPath = os.path.realpath(os.path.join(user_plugin_path(), "..", "snippets"))
 try:
@@ -41,9 +42,7 @@ def loadSnippetFromFile(snippetPath):
     else:
         qKeySequence = QKeySequence(snippetText[1].strip()[1:])
         if qKeySequence.isEmpty():
-            qKeySequence = []
-        else:
-            qKeySequence = [qKeySequence]
+            qKeySequence = None
         return (snippetText[0].strip()[1:], 
                 qKeySequence,
                 ''.join(snippetText[2:])
@@ -54,10 +53,16 @@ def executeSnippet(code, context):
     snippetGlobals['current_view'] = context.binaryView
     snippetGlobals['bv'] = context.binaryView
     snippetGlobals['current_function'] = context.function
-    #snippetGlobals['current_basic_block'] = context.block
+    if context.function is not None:
+        snippetGlobals['current_basic_block'] = context.function.get_basic_block_at(context.address)
+    else:
+        snippetGlobals['current_basic_block'] = None
     snippetGlobals['current_address'] = context.address
     snippetGlobals['here'] = context.address
-    snippetGlobals['current_selection'] = (context.address, context.address+context.length)
+    if context.address is not None and isinstance(context.length, numbers.Integral):
+        snippetGlobals['current_selection'] = (context.address, context.address+context.length)
+    else:
+        snippetGlobals['current_selection'] = None
     snippetGlobals['current_llil'] = context.lowLevelILFunction
     snippetGlobals['current_mlil'] = context.mediumLevelILFunction
 
@@ -76,7 +81,7 @@ class Snippets(QDialog):
     def __init__(self, parent=None):
         super(Snippets, self).__init__(parent)
         # Create widgets
-        self.setWindowModality(Qt.NonModal)
+        self.setWindowModality(Qt.ApplicationModal)
         self.title = QLabel(self.tr("Snippet Editor"))
         self.saveButton = QPushButton(self.tr("Save"))
         self.revertButton = QPushButton(self.tr("Revert"))
@@ -177,19 +182,32 @@ class Snippets(QDialog):
         self.deleteSnippetButton.clicked.connect(self.deleteSnippet)
         self.newFolderButton.clicked.connect(self.newFolder)
 
-    def registerAllSnippets(self):
-        for action in list(filter(lambda x: x.startswith("Snippet\\"), UIAction.getAllRegisteredActions())):
+        #Read-only until new snippet
+        self.readOnly(True)
+
+    @staticmethod
+    def registerAllSnippets():
+        for action in list(filter(lambda x: x.startswith("Snippets\\"), UIAction.getAllRegisteredActions())):
+            if action == "Snippets\\Snippet Editor...":
+                continue
             UIActionHandler.globalActions().unbindAction(action)
+            Menu.mainMenu("Tools").removeAction(action)
             UIAction.unregisterAction(action)
 
         for snippet in includeWalk(snippetPath, ".py"):
-            (snippetDescription, snippetKey, snippetCode) = loadSnippetFromFile(snippet)
+            snippetKeys = None
+            (snippetDescription, snippetKeys, snippetCode) = loadSnippetFromFile(snippet)
             if not snippetDescription:
-                actionText = "Snippet\\" + snippet
+                actionText = "Snippets\\" + snippet
             else:
-                actionText = "Snippet\\" + snippetDescription
-            UIAction.registerAction(actionText, snippetKey)
-            UIActionHandler.globalActions().bindAction(actionText, UIAction(makeSnippetFunction(snippetCode)))
+                actionText = "Snippets\\" + snippetDescription
+            if snippetCode:
+                if snippetKeys == None:
+                    UIAction.registerAction(actionText)
+                else:
+                    UIAction.registerAction(actionText, snippetKeys)
+                UIActionHandler.globalActions().bindAction(actionText, UIAction(makeSnippetFunction(snippetCode)))
+                Menu.mainMenu("Tools").addAction(actionText, actionText)
 
     def clearSelection(self):
         self.keySequenceEdit.clear()
@@ -224,6 +242,7 @@ class Snippets(QDialog):
             return
         newSelection = self.files.filePath(new.indexes()[0])
         if QFileInfo(newSelection).isDir():
+            self.readOnly(True)
             self.clearSelection()
             return
 
@@ -241,11 +260,11 @@ class Snippets(QDialog):
 
     def loadSnippet(self):
         self.currentFileLabel.setText(QFileInfo(self.currentFile).baseName())
-        log_debug("Loading %s as a snippet." % self.currentFile)
-        (snippetDescription, snippetKey, snippetCode) = loadSnippetFromFile(self.currentFile)
+        (snippetDescription, snippetKeys, snippetCode) = loadSnippetFromFile(self.currentFile)
         self.snippetDescription.setText(snippetDescription) if snippetDescription else self.snippetDescription.setText("")
-        self.keySequenceEdit.setKeySequence(snippetKey[0]) if len(snippetKey) != 0 else self.keySequenceEdit.setKeySequence(QKeySequence(""))
+        self.keySequenceEdit.setKeySequence(snippetKeys) if snippetKeys else self.keySequenceEdit.setKeySequence(QKeySequence(""))
         self.edit.setPlainText(snippetCode) if snippetCode else self.edit.setPlainText("")
+        self.readOnly(False)
 
     def newFileDialog(self):
         (snippetName, ok) = QInputDialog.getText(self, self.tr("Snippet Name"), self.tr("Snippet Name: "))
@@ -258,7 +277,19 @@ class Snippets(QDialog):
                 open(os.path.join(selection, snippetName), "w").close()
             else:
                 open(os.path.join(snippetPath, snippetName), "w").close()
+                self.readOnly(False)
             log_debug("Snippet %s created." % snippetName)
+
+    def readOnly(self, flag):
+        self.keySequenceEdit.setEnabled(not flag)
+        self.snippetDescription.setReadOnly(flag)
+        self.edit.setReadOnly(flag)
+        if flag:
+            self.snippetDescription.setDisabled(True)
+            self.edit.setDisabled(True)
+        else:
+            self.snippetDescription.setEnabled(True)
+            self.edit.setEnabled(True)
 
     def deleteSnippet(self):
         selection = self.tree.selectedIndexes()[::self.columns][0] #treeview returns each selected element in the row
@@ -268,16 +299,17 @@ class Snippets(QDialog):
             log_debug("Deleting snippet %s." % snippetName)
             self.clearSelection()
             self.files.remove(selection)
+            self.registerAllSnippets()
 
     def snippetChanged(self):
         if (self.currentFile == "" or QFileInfo(self.currentFile).isDir()):
             return False
-        (snippetDescription, snippetKey, snippetCode) = loadSnippetFromFile(self.currentFile)
+        (snippetDescription, snippetKeys, snippetCode) = loadSnippetFromFile(self.currentFile)
         if (not snippetCode):
             return False
-        if len(snippetKey) == 0 and not self.keySequenceEdit.keySequence().isEmpty():
+        if snippetKeys == None and not self.keySequenceEdit.keySequence().isEmpty():
             return True
-        if len(snippetKey) != 0 and snippetKey[0] != self.keySequenceEdit.keySequence():
+        if snippetKeys != None and snippetKeys != self.keySequenceEdit.keySequence().toString():
             return True
         return self.edit.toPlainText() != snippetCode or \
                self.snippetDescription.text() != snippetDescription
@@ -304,6 +336,7 @@ if __name__ == '__main__':
     snippets.show()
     sys.exit(app.exec_())
 else:
-    UIAction.registerAction("Snippet Editor...")
-    UIActionHandler.globalActions().bindAction("Snippet Editor...", UIAction(launchPlugin))
-    Menu.mainMenu("Tools").addAction("Snippet Editor...", "Snippet")
+    Snippets.registerAllSnippets()
+    UIAction.registerAction("Snippets\\Snippet Editor...")
+    UIActionHandler.globalActions().bindAction("Snippets\\Snippet Editor...", UIAction(launchPlugin))
+    Menu.mainMenu("Tools").addAction("Snippets\\Snippet Editor...", "Snippet")

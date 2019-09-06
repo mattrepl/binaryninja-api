@@ -106,6 +106,7 @@ public Q_SLOTS:
 class BINARYNINJAUIAPI LogView: public QListView, public DockContextHandler
 {
 	Q_OBJECT
+	Q_INTERFACES(DockContextHandler)
 
 	QPointer<LogStatus> m_logStatus;
 	std::vector<std::pair<QAction*, bool>> m_actionEnableList;
@@ -127,9 +128,10 @@ public:
 
 protected:
 	void contextMenuEvent(QContextMenuEvent* event) override;
-	void focusInput() override;
+	void notifyFontChanged() override;
+	void notifyThemeChanged() override;
 	void notifyViewChanged(ViewFrame* frame) override;
-	void updateFonts() override;
+	void notifyVisibilityChanged(bool visible) override;
 
 Q_SIGNALS:
 	void notifyUiStatus();

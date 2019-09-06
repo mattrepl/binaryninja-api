@@ -19,6 +19,7 @@ The previous tools are used in the generation of our documentation, but are not 
     - [opensans] ([opensans license] - Apache 2.0)
     - [qt] ([qt license] - LGPLv3 / note, please see our [qt build instructions below](open-source.md#building-qt))
     - [sourcecodepro] ([sourcecodepro license] - SIL open font license)
+    - [rlcompleter] ([python license] - Python Software Foundation License 2)
 
 * Core
     - [discount] ([discount license] - BSD)
@@ -26,14 +27,14 @@ The previous tools are used in the generation of our documentation, but are not 
     - [libmspack] ([libmspack license] - LGPL, v2)
     - [llvm] ([llvm license] - BSD-style)
     - [lzf] ([lzf license] - BSD)
-    - [jemalloc] ([jemalloc license] - BSD)
+    - [python] ([python license] - Python Software Foundation License 2 -- a Python 2.7 built without GPL components is currently shipped with Windows builds only, other platforms leverage existing Python installs)
     - [sqlite] ([sqlite license] - public domain)
     - [zlib] ([zlib license] - zlib license)
 
 * Other
     - [yasm] ([yasm license] - 2-clause BSD) used for assembling x86 and x64
     - [xed] ([xed license] - Apache License 2.0) used for disassembling x86, x64, and x16
-    - [capstone] ([capstone license] - 3-clause BSD) used in the PPC architecture module as an example of how to wrap an external disassembler
+    - [capstone] ([capstone license] - 3-clause BSD) used in the [PPC architecture module] as an example of how to wrap an external disassembler
 
 * Upvector update library
     - [tomcrypt] ([tomcrypt license] - public domain)
@@ -46,7 +47,7 @@ Binary Ninja uses [Qt 5.12] under an LGPLv3 license which requires that we host 
 Please note that we offer no support for running Binary Ninja with modified Qt libraries.
 
 1. Follow the installation requirements on the [Building Qt 5 from Git] page.
-2. Download the Qt 5.12.0 [tarball] from binary.ninja. (Note this is an unmodified 5.12 identical to that available from Qt's source control, but must be hosted locally according to the [Qt 5.12] terms.)
+2. Download the Qt 5.12.3 [tarball] from binary.ninja. (Note this is an unmodified 5.12 identical to that available from Qt's source control, but must be hosted locally according to the [Qt 5.12] terms.)
 3. Next, build QT using the aforementioned instructions.
 4. On OS X, you will need to disable the code-signing signature since it would otherwise prevent changes to binaries or shared libraries.  We recommend a tool such as [unsign].
 5. Finally, replace the built libraries:
@@ -74,8 +75,6 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [libmspack license]: https://www.cabextract.org.uk/libmspack/#license
 [llvm]: http://llvm.org/releases/3.8.1/
 [llvm license]: http://llvm.org/releases/3.8.1/LICENSE.TXT
-[jemalloc]: http://jemalloc.net/
-[jemalloc license]: https://github.com/jemalloc/jemalloc/blob/dev/COPYING
 [lzf license]: http://oldhome.schmorp.de/marc/liblzf.html
 [lzf]: http://oldhome.schmorp.de/marc/liblzf.html
 [mkdocs license]: https://github.com/mkdocs/mkdocs/blob/master/LICENSE
@@ -84,15 +83,18 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [mkdocs]: http://www.mkdocs.org/
 [opensans license]: http://www.apache.org/licenses/LICENSE-2.0.html
 [opensans]: https://www.google.com/fonts/specimen/Open+Sans
+[PPC architecture module]: https://github.com/Vector35/ppc-capstone
+[python license]: https://github.com/python/cpython/blob/master/LICENSE
 [qt license]: https://www.qt.io/qt-licensing-terms/
 [qt]: https://www.qt.io/download/
-[sourcecodepro license]:  https://github.com/adobe-fonts/source-code-pro/blob/master/LICENSE.txt
+[rlcompleter]: https://github.com/python/cpython/blob/master/Lib/rlcompleter.py
+[sourcecodepro license]:  https://github.com/adobe-fonts/source-code-pro/blob/master/LICENSE.md
 [sourcecodepro]: https://github.com/adobe-fonts/source-code-pro
 [sphinx license]: https://github.com/sphinx-doc/sphinx/blob/master/LICENSE
 [sphinx]: http://www.sphinx-doc.org/en/stable/index.html
 [sqlite license]: https://www.sqlite.org/copyright.html
 [sqlite]: https://www.sqlite.org/index.html
-[tarball]: https://binary.ninja/qt5.12.0.tar.xz
+[tarball]: https://binary.ninja/qt5.12.3.tar.xz
 [tomcrypt license]: https://github.com/libtom/libtomcrypt/blob/develop/LICENSE
 [tomcrypt]:  https://github.com/libtom/libtomcrypt
 [unsign]: https://github.com/steakknife/unsign
