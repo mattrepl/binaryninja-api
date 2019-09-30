@@ -6,7 +6,9 @@ https://github.com/python/cpython/blob/master/LICENSE
 The only changes made were to modify the regular expression in attr_matches
 and all code that relied on GNU readline (the later more for readability as
 it wasn't required).
+
 --------------
+
 Word completion for GNU readline.
 
 The completer completes keywords, built-ins and globals in a selectable
@@ -39,11 +41,28 @@ Notes:
 """
 
 import atexit
-from six.moves import builtins
-from six import class_types
 import __main__
+import inspect
+import sys
 
 __all__ = ["Completer"]
+
+def fnsignature(obj):
+	if sys.version_info[0:2] >= (3, 5):
+		try:
+			sig = str(inspect.signature(obj))
+		except:
+			sig = "()"
+		return sig
+	else:
+		try:
+			args = inspect.getargspec(obj).args
+			args.remove('self')
+			sig =  "(" + ','.join(args) +  ")"
+		except:
+			sig = "()"
+		return sig
+
 
 class Completer:
 	def __init__(self, namespace = None):
@@ -100,8 +119,8 @@ class Completer:
 			return None
 
 	def _callable_postfix(self, val, word):
-		if callable(val) and not isinstance(val, class_types):
-			word = word + "("
+		if callable(val) and not inspect.isclass(val):
+			word = word + fnsignature(val)
 		return word
 
 	def global_matches(self, text):
@@ -125,7 +144,12 @@ class Completer:
 								  'else'}:
 					word = word + ' '
 				matches.append(word)
-		for nspace in [self.namespace, builtins.__dict__]:
+		#Not sure why in the console builtins becomes a dict but this works for now.
+		if hasattr(__builtins__, '__dict__'):
+			builtins =  __builtins__.__dict__
+		else:
+			builtins =  __builtins__
+		for nspace in [self.namespace, builtins]:
 			for word, val in nspace.items():
 				if word[:n] == text and word not in seen:
 					seen.add(word)

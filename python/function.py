@@ -73,13 +73,13 @@ class LookupTableEntry(object):
 class RegisterValue(object):
 	def __init__(self, arch = None, value = None, confidence = types.max_confidence):
 		self._is_constant = False
+		self._value = None
+		self._arch = None
+		self._reg = None
+		self._is_constant = False
+		self._offset = None
 		if value is None:
 			self._type = RegisterValueType.UndeterminedValue
-			self._value = None
-			self._arch = None
-			self._reg = None
-			self._is_constant = False
-			self._offset = None
 		else:
 			self._type = RegisterValueType(value.state)
 			if value.state == RegisterValueType.EntryValue:
@@ -932,22 +932,28 @@ class Function(object):
 		core.BNFreeAddressList(addrs)
 		return result
 
-	def create_tag(self, type, data):
+	def create_user_tag(self, type, data):
+		return self.create_tag(type, data, True)
+
+	def create_auto_tag(self, type, data):
+		return self.create_tag(type, data, False)
+
+	def create_tag(self, type, data, user=True):
 		"""
 		``create_tag`` creates a new Tag object but does not add it anywhere
 
 		:param TagType type: The Tag Type for this Tag
 		:param str data: Additional data for the Tag
-		:return The created Tag
-		:rtype Tag
+		:return: The created Tag
+		:rtype: Tag
 		:Example:
 
-			>>> tt = bv.tag_types["Crabby Functions"]
-			>>> tag = current_function.create_tag(tt, "Get Crabbed")
+			>>> tt = bv.tag_types["Crashes"]
+			>>> tag = current_function.create_tag(tt, "Null pointer dereference", True)
 			>>> current_function.add_user_address_tag(here, tag)
 			>>>
 		"""
-		return self.view.create_tag(type, data)
+		return self.view.create_tag(type, data, user)
 
 	@property
 	def address_tags(self):
@@ -955,7 +961,7 @@ class Function(object):
 		``address_tags`` gets a list of all address Tags in the function.
 		Tags are returned as a list of (arch, address, Tag) tuples.
 
-		:type [(Architecture, int, Tag)]
+		:rtype: list((Architecture, int, Tag))
 		"""
 		count = ctypes.c_ulonglong()
 		tags = core.BNGetAddressTagReferences(self.handle, count)
@@ -973,8 +979,8 @@ class Function(object):
 
 		:param int addr: Address to get tags at
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:return A list of Tags
-		:rtype [Tag]
+		:return: A list of Tags
+		:rtype: list(Tag)
 		"""
 		if arch is None:
 			arch = self.arch
@@ -994,7 +1000,7 @@ class Function(object):
 		:param int addr: Address at which to add the tag
 		:param Tag tag: Tag object to be added
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:rtype None
+		:rtype: None
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1010,8 +1016,8 @@ class Function(object):
 		:param str data: Additional data for the Tag
 		:param bool unique: If a tag already exists at this location with this data, don't add another
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:return The created Tag
-		:rtype Tag
+		:return: The created Tag
+		:rtype: Tag
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1021,7 +1027,7 @@ class Function(object):
 				if tag.type == type and tag.data == data:
 					return
 
-		tag = self.create_tag(type, data)
+		tag = self.create_tag(type, data, True)
 		core.BNAddUserAddressTag(self.handle, arch.handle, addr, tag.handle)
 		return tag
 
@@ -1033,7 +1039,7 @@ class Function(object):
 		:param int addr: Address at which to add the tag
 		:param Tag tag: Tag object to be added
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:rtype None
+		:rtype: None
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1046,7 +1052,7 @@ class Function(object):
 		:param int addr: Address at which to add the tag
 		:param Tag tag: Tag object to be added
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:rtype None
+		:rtype: None
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1061,8 +1067,8 @@ class Function(object):
 		:param str data: Additional data for the Tag
 		:param bool unique: If a tag already exists at this location with this data, don't add another
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:return The created Tag
-		:rtype Tag
+		:return: The created Tag
+		:rtype: Tag
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1072,7 +1078,7 @@ class Function(object):
 				if tag.type == type and tag.data == data:
 					return
 
-		tag = self.create_tag(type, data)
+		tag = self.create_tag(type, data, False)
 		core.BNAddAutoAddressTag(self.handle, arch.handle, addr, tag.handle)
 		return tag
 
@@ -1083,7 +1089,7 @@ class Function(object):
 		:param int addr: Address at which to add the tag
 		:param Tag tag: Tag object to be added
 		:param Architecture arch: Architecture for the block in which the Tag is added (optional)
-		:rtype None
+		:rtype: None
 		"""
 		if arch is None:
 			arch = self.arch
@@ -1094,7 +1100,7 @@ class Function(object):
 		"""
 		``function_tags`` gets a list of all function Tags for the function.
 
-		:type [Tag]
+		:rtype: list(Tag)
 		"""
 		count = ctypes.c_ulonglong()
 		tags = core.BNGetFunctionTags(self.handle, count)
@@ -1110,7 +1116,7 @@ class Function(object):
 		Since this adds a user tag, it will be added to the current undo buffer.
 
 		:param Tag tag: Tag object to be added
-		:rtype None
+		:rtype: None
 		"""
 		core.BNAddUserFunctionTag(self.handle, tag.handle)
 
@@ -1122,15 +1128,15 @@ class Function(object):
 		:param TagType type: Tag Type for the Tag that is created
 		:param str data: Additional data for the Tag
 		:param bool unique: If a tag already exists with this data, don't add another
-		:return The created Tag
-		:rtype Tag
+		:return: The created Tag
+		:rtype: Tag
 		"""
 		if unique:
 			for tag in self.function_tags:
 				if tag.type == type and tag.data == data:
 					return
 
-		tag = self.create_tag(type, data)
+		tag = self.create_tag(type, data, True)
 		core.BNAddUserFunctionTag(self.handle, tag.handle)
 		return tag
 
@@ -1140,7 +1146,7 @@ class Function(object):
 		Since this removes a user tag, it will be added to the current undo buffer.
 
 		:param Tag tag: Tag object to be added
-		:rtype None
+		:rtype: None
 		"""
 		core.BNRemoveUserFunctionTag(self.handle, tag.handle)
 
@@ -1149,7 +1155,7 @@ class Function(object):
 		``add_user_function_tag`` adds an already-created Tag object as a function tag.
 
 		:param Tag tag: Tag object to be added
-		:rtype None
+		:rtype: None
 		"""
 		core.BNAddAutoFunctionTag(self.handle, tag.handle)
 
@@ -1160,15 +1166,15 @@ class Function(object):
 		:param TagType type: Tag Type for the Tag that is created
 		:param str data: Additional data for the Tag
 		:param bool unique: If a tag already exists with this data, don't add another
-		:return The created Tag
-		:rtype Tag
+		:return: The created Tag
+		:rtype: Tag
 		"""
 		if unique:
 			for tag in self.function_tags:
 				if tag.type == type and tag.data == data:
 					return
 
-		tag = self.create_tag(type, data)
+		tag = self.create_tag(type, data, False)
 		core.BNAddAutoFunctionTag(self.handle, tag.handle)
 		return tag
 
@@ -1177,7 +1183,7 @@ class Function(object):
 		``remove_user_function_tag`` removes a Tag object as a function tag.
 
 		:param Tag tag: Tag object to be added
-		:rtype None
+		:rtype: None
 		"""
 		core.BNRemoveAutoFunctionTag(self.handle, tag.handle)
 
@@ -1557,8 +1563,8 @@ class Function(object):
 		"""
 		``set_comment_at`` sets a comment for the current function at the address specified
 
-		:param addr int: virtual address within the current function to apply the comment to
-		:param comment str: string comment to apply
+		:param int addr: virtual address within the current function to apply the comment to
+		:param str comment: string comment to apply
 		:rtype: None
 		:Example:
 
@@ -1574,9 +1580,9 @@ class Function(object):
 		source instruction is not contained within this function, no action is performed.
 		To remove the reference, use :func:`remove_user_code_ref`.
 
-		:param from_addr int: virtual address of the source instruction
-		:param to_addr int: virtual address of the xref's destination.
-		:param from_arch Architecture: (optional) architecture of the source instruction
+		:param int from_addr: virtual address of the source instruction
+		:param int to_addr: virtual address of the xref's destination.
+		:param Architecture from_arch: (optional) architecture of the source instruction
 		:rtype: None
 		:Example:
 
@@ -1595,9 +1601,9 @@ class Function(object):
 		If the given address is not contained within this function, or if there is no
 		such user-defined cross-reference, no action is performed.
 
-		:param from_addr int: virtual address of the source instruction
-		:param to_addr int: virtual address of the xref's destination.
-		:param from_arch Architecture: (optional) architecture of the source instruction
+		:param int from_addr: virtual address of the source instruction
+		:param int to_addr: virtual address of the xref's destination.
+		:param Architecture from_arch: (optional) architecture of the source instruction
 		:rtype: None
 		:Example:
 
@@ -1695,7 +1701,7 @@ class Function(object):
 		:param Architecture arch: (optional) Architecture for the given function
 		:rtype: binaryninja.function.RegisterValue
 
-		.. note:: Stack base is zero on entry into the function unless the architecture places the return address on the
+		.. note:: Stack base is zero on entry into the function unless the architecture places the return address on the \
 		stack as in (x86/x86_64) where the stack base will start at address_size
 
 		:Example:

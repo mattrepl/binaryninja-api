@@ -30,6 +30,37 @@ from binaryninja.enums import SettingsScope
 
 
 class Settings(object):
+	"""
+	``class Settings`` Provides a way to define and access settings in a hierarchical fashion. The value of a setting can \
+	be defined for each hierarchical level, where each level overrides the preceding level. The backing-store for setting \
+	values is also configurable and can be different for each level. This allows for ephemeral or platform-independent \
+	persistent settings storage for components within Binary Ninja or consumers of the Binary Ninja API.
+
+	Each `Settings` instance has a unique `instance_id` and a settings schema which defines the contents for the settings \
+	repository. By default, a new `Settings` instance contains an empty schema. A schema can be built up by using the \
+	`register_group` and `register_setting` methods, or by deserializing an existing schema with `deserialize_schema` \
+	Binary Ninja provides a default `Settings` instance identified as 'default'. The 'default' settings repository defines \
+	all of the settings available for the active Binary Ninja components.
+
+	.. note:: The Binary Ninja Application provides many settings that are only applicable to the UI, and thus would not be \
+	defined in the 'default' settings schema for Binary Ninja headless.
+
+	Except for default setting values, values are stored separately from the schema in a backing store. The backing store can \
+	be different for each level. When accessing setting values, the order of precedence is: Context > Workspace > User > Default.
+
+		=================== ============================ ============================== ===============================
+		Setting Level       Settings Scope               Backing Store ('default')        Backing Store (Other)
+		=================== ============================ ============================== ===============================
+		Default             SettingsDefaultScope         Settings Schema                  Settings Schema
+		User                SettingsUserScope            <User Directory>/settings.json   <TBD>
+		Workspace           SettingsWorkspaceScope       <TBD>                            <TBD>
+		Context             SettingsContextScope         BinaryView (Storage in bndb)    BinaryView (Storage in bndb)
+		=================== ============================ ============================== ===============================
+
+	Individual settings are identified by a key, which is a string in the form of '<group>.<name>'. Groups provide a simple way \
+	to categorize settings. Additionally, sub-categories can be expressed directly in the name part of the key with the same dot \
+	notation.
+	"""
 	handle = core.BNCreateSettings("default")
 
 	def __init__(self, instance_id = "default", handle = None):
@@ -74,7 +105,7 @@ class Settings(object):
 
 	def register_group(self, group, title):
 		"""
-		``register_group`` registers a group for use with this Settings instance. Groups provide a simple way to organize settings.
+		``register_group`` registers a group in the schema for this `Settings` instance
 
 		:param str group: a unique identifier
 		:param str title: a user friendly name appropriate for UI presentation
@@ -90,7 +121,7 @@ class Settings(object):
 
 	def register_setting(self, key, properties):
 		"""
-		``register_setting`` registers a new setting with this Settings instance.
+		``register_setting`` registers a new setting with this `Settings` instance
 
 		:param str key: a unique setting identifier in the form <group>.<name>
 		:param str properties: a JSON string describes the setting schema
@@ -185,7 +216,7 @@ class Settings(object):
 	def get_json(self, key, view = None):
 		if view is not None:
 			view = view.handle
-		return core.BNSettingsGetJsonString(self.handle, key, view, None)
+		return core.BNSettingsGetJson(self.handle, key, view, None)
 
 	def get_bool_with_scope(self, key, view = None, scope = SettingsScope.SettingsAutoScope):
 		if view is not None:
@@ -231,7 +262,7 @@ class Settings(object):
 		if view is not None:
 			view = view.handle
 		c_scope = core.SettingsScopeEnum(scope)
-		result = core.BNSettingsGetJsonString(self.handle, key, view, ctypes.byref(c_scope))
+		result = core.BNSettingsGetJson(self.handle, key, view, ctypes.byref(c_scope))
 		return (result, SettingsScope(c_scope.value))
 
 	def set_bool(self, key, value, view = None, scope = SettingsScope.SettingsAutoScope):
@@ -263,3 +294,8 @@ class Settings(object):
 		for i in range(len(value)):
 			string_list[i] = value[i].encode('charmap')
 		return core.BNSettingsSetStringList(self.handle, view, scope, key, string_list, length)
+
+	def set_json(self, key, value, view = None, scope = SettingsScope.SettingsAutoScope):
+		if view is not None:
+			view = view.handle
+		return core.BNSettingsSetJson(self.handle, view, scope, key, value)

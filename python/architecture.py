@@ -430,6 +430,18 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		pl = core.BNGetArchitectureStandalonePlatform(self.handle)
 		return platform.Platform(self, pl)
 
+	@property
+	def type_libraries(self):
+		"""Architecture type libraries"""
+		count = ctypes.c_ulonglong(0)
+		result = []
+		handles = core.BNGetArchitectureTypeLibraries(self.handle, count)
+		for i in range(0, count.value):
+			result.append(binaryninja.typelibrary.TypeLibrary(core.BNNewTypeLibraryReference(handles[i])))
+		core.BNFreeTypeLibraryList(handles, count.value)
+		return result
+
+
 	def __setattr__(self, name, value):
 		if ((name == "name") or (name == "endianness") or (name == "address_size") or
 			(name == "default_int_size") or (name == "regs") or (name == "get_max_instruction_length") or
@@ -1235,7 +1247,8 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		:param int size:
 		:param int write_type:
 		:param int flag:
-		:param list(int_or_str):
+		:param operands:
+		:type operands: list(str) or list(int)
 		:param LowLevelILFunction il:
 		:rtype: LowLevelILExpr
 		"""
@@ -1685,7 +1698,8 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		:param LowLevelILOperation op:
 		:param int size:
 		:param str write_type:
-		:param list(str or int) operands: a list of either items that are either string register names or constant \
+		:param operands: a list of either items that are either string register names or constant \
+		:type operands: list(str) or list(int)
 		integer values
 		:param LowLevelILFunction il:
 		:rtype: LowLevelILExpr
@@ -1697,7 +1711,8 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		:param LowLevelILOperation op:
 		:param int size:
 		:param FlagRole role:
-		:param list(str or int) operands: a list of either items that are either string register names or constant \
+		:param operands: a list of either items that are either string register names or constant \
+		:type operands: list(str) or list(int)
 		integer values
 		:param LowLevelILFunction il:
 		:rtype: LowLevelILExpr index
@@ -2360,7 +2375,8 @@ class CoreArchitecture(Architecture):
 		:param LowLevelILOperation op:
 		:param int size:
 		:param str write_type:
-		:param list(str or int) operands: a list of either items that are either string register names or constant \
+		:param operands: a list of either items that are either string register names or constant \
+		:type operands: list(str) or list(int)
 		integer values
 		:param LowLevelILFunction il:
 		:rtype: LowLevelILExpr

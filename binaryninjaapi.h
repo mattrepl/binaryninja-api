@@ -886,6 +886,7 @@ namespace BinaryNinja
 		Ref<BinaryView> OpenExistingDatabase(const std::string& path);
 		Ref<BinaryView> OpenExistingDatabase(const std::string& path,
 			const std::function<void(size_t progress, size_t total)>& progressCallback);
+		Ref<BinaryView> OpenDatabaseForConfiguration(const std::string& path);
 		bool SaveAutoSnapshot(BinaryView* data);
 		bool SaveAutoSnapshot(BinaryView* data,
 			const std::function<void(size_t progress, size_t total)>& progressCallback);
@@ -907,6 +908,8 @@ namespace BinaryNinja
 	struct DataVariable;
 	class Symbol;
 	class Tag;
+	class TagType;
+	struct TagReference;
 
 	class BinaryDataNotification
 	{
@@ -927,6 +930,10 @@ namespace BinaryNinja
 		static void SymbolUpdatedCallback(void* ctxt, BNBinaryView* view, BNSymbol* sym);
 		static void SymbolRemovedCallback(void* ctxt, BNBinaryView* view, BNSymbol* sym);
 		static void DataMetadataUpdatedCallback(void* ctxt, BNBinaryView* object, uint64_t offset);
+		static void TagTypeUpdatedCallback(void* ctxt, BNBinaryView* object, BNTagType* tagType);
+		static void TagAddedCallback(void* ctxt, BNBinaryView* object, BNTagReference* tagRef);
+		static void TagUpdatedCallback(void* ctxt, BNBinaryView* object, BNTagReference* tagRef);
+		static void TagRemovedCallback(void* ctxt, BNBinaryView* object, BNTagReference* tagRef);
 		static void StringFoundCallback(void* ctxt, BNBinaryView* data, BNStringType type, uint64_t offset, size_t len);
 		static void StringRemovedCallback(void* ctxt, BNBinaryView* data, BNStringType type, uint64_t offset, size_t len);
 		static void TypeDefinedCallback(void* ctxt, BNBinaryView* data, BNQualifiedName* name, BNType* type);
@@ -949,6 +956,10 @@ namespace BinaryNinja
 		virtual void OnDataVariableRemoved(BinaryView* view, const DataVariable& var) { (void)view; (void)var; }
 		virtual void OnDataVariableUpdated(BinaryView* view, const DataVariable& var) { (void)view; (void)var; }
 		virtual void OnDataMetadataUpdated(BinaryView* view, uint64_t offset) { (void)view; (void)offset; }
+		virtual void OnTagTypeUpdated(BinaryView* view, Ref<TagType> tagTypeRef) { (void)view; (void)tagTypeRef; }
+		virtual void OnTagAdded(BinaryView* view, const TagReference& tagRef) { (void)view; (void)tagRef; }
+		virtual void OnTagUpdated(BinaryView* view, const TagReference& tagRef) { (void)view; (void)tagRef; }
+		virtual void OnTagRemoved(BinaryView* view, const TagReference& tagRef) { (void)view; (void)tagRef; }
 		virtual void OnSymbolAdded(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
 		virtual void OnSymbolUpdated(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
 		virtual void OnSymbolRemoved(BinaryView* view, Symbol* sym) { (void)view; (void)sym; }
@@ -1558,8 +1569,8 @@ namespace BinaryNinja
 		Ref<TagType> GetTagType(const std::string& name, TagType::Type type);
 		std::vector<Ref<TagType>> GetTagTypes();
 
-		void AddTag(Ref<Tag> tag);
-		void RemoveTag(Ref<Tag> tag);
+		void AddTag(Ref<Tag> tag, bool user = false);
+		void RemoveTag(Ref<Tag> tag, bool user = false);
 		Ref<Tag> GetTag(uint64_t tagId);
 
 		std::vector<TagReference> GetAllTagReferences();
@@ -1567,6 +1578,9 @@ namespace BinaryNinja
 		std::vector<TagReference> GetAllFunctionTagReferences();
 		std::vector<TagReference> GetAllTagReferencesOfType(Ref<TagType> tagType);
 		std::vector<TagReference> GetTagReferencesOfType(Ref<TagType> tagType);
+
+		size_t GetTagReferencesOfTypeCount(Ref<TagType> tagType);
+		size_t GetAllTagReferencesOfTypeCount(Ref<TagType> tagType);
 
 		std::vector<TagReference> GetDataTagReferences();
 		std::vector<Ref<Tag>> GetDataTags(uint64_t addr);
@@ -1698,6 +1712,7 @@ namespace BinaryNinja
 		std::vector<uint8_t> GetRawMetadata(const std::string& key);
 		uint64_t GetUIntMetadata(const std::string& key);
 
+		std::vector<std::string> GetLoadSettingsTypeNames();
 		Ref<Settings> GetLoadSettings(const std::string& typeName);
 		void SetLoadSettings(const std::string& typeName, Ref<Settings> settings);
 
@@ -2878,6 +2893,7 @@ namespace BinaryNinja
 
 		std::vector<TagReference> GetAllTagReferences();
 		std::vector<TagReference> GetTagReferencesOfType(Ref<TagType> tagType);
+		size_t GetTagReferencesOfTypeCount(Ref<TagType> tagType);
 
 		std::vector<TagReference> GetAddressTagReferences();
 		std::vector<Ref<Tag>> GetAddressTags(Architecture* arch, uint64_t addr);
@@ -4571,6 +4587,7 @@ namespace BinaryNinja
 		bool Set(const std::string& key, const char* value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 		bool Set(const std::string& key, const std::string& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 		bool Set(const std::string& key, const std::vector<std::string>& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
+		bool SetJson(const std::string& key, const std::string& value, Ref<BinaryView> view = nullptr, BNSettingsScope scope = SettingsAutoScope);
 	};
 
 	// explicit specializations

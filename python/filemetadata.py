@@ -76,7 +76,7 @@ class FileMetadata(object):
 		"""
 		Instantiates a new FileMetadata class.
 
-		:param filename: The string path to the file to be opened. Defaults to None.
+		:param str filename: The string path to the file to be opened. Defaults to None.
 		:param handle: A handle to the underlying C FileMetadata object. Defaults to None.
 		"""
 		if handle is not None:
@@ -340,6 +340,12 @@ class FileMetadata(object):
 			view = core.BNOpenExistingDatabaseWithProgress(self.handle, str(filename), None,
 				ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
 				lambda ctxt, cur, total: progress_func(cur, total)))
+		if view is None:
+			return None
+		return binaryninja.binaryview.BinaryView(file_metadata = self, handle = view)
+
+	def open_database_for_configuration(self, filename):
+		view = core.BNOpenDatabaseForConfiguration(self.handle, str(filename))
 		if view is None:
 			return None
 		return binaryninja.binaryview.BinaryView(file_metadata = self, handle = view)
