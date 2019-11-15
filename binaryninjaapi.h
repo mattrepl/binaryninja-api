@@ -585,6 +585,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+    __attribute__ ((format (printf, 2, 3)))
+#endif
 	void Log(BNLogLevel level, const char* fmt, ...);
 
 	/*! LogDebug only writes text to the error console if the console is set to log level: DebugLog
@@ -593,6 +596,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	void LogDebug(const char* fmt, ...);
 
 	/*! LogInfo always writes text to the error console, and corresponds to the log level: InfoLog.
@@ -601,6 +607,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	void LogInfo(const char* fmt, ...);
 
 	/*! LogWarn writes text to the error console including a warning icon,
@@ -609,6 +618,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	void LogWarn(const char* fmt, ...);
 
 	/*! LogError writes text to the error console and pops up the error console. Additionall,
@@ -617,6 +629,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	void LogError(const char* fmt, ...);
 
 	/*! LogAlert pops up a message box displaying the alert message and logs to the error console.
@@ -625,6 +640,9 @@ namespace BinaryNinja
 		\param fmt C-style format string.
 		\param ... Variable arguments corresponding to the format string.
 	 */
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	void LogAlert(const char* fmt, ...);
 
 	void LogToStdout(BNLogLevel minimumLevel);
@@ -891,6 +909,9 @@ namespace BinaryNinja
 		bool SaveAutoSnapshot(BinaryView* data,
 			const std::function<void(size_t progress, size_t total)>& progressCallback);
 
+		bool Rebase(BinaryView* data, uint64_t address);
+		bool Rebase(BinaryView* data, uint64_t address, const std::function<void(size_t progress, size_t total)>& progressCallback);
+
 		void BeginUndoActions();
 		void CommitUndoActions();
 
@@ -1015,6 +1036,7 @@ namespace BinaryNinja
 		NameList(const std::string& name, const std::string& join);
 		NameList(const std::vector<std::string>& name, const std::string& join);
 		NameList(const NameList& name, const std::string& join);
+		NameList(const NameList& name);
 		virtual ~NameList();
 
 		virtual NameList& operator=(const std::string& name);
@@ -2406,6 +2428,7 @@ namespace BinaryNinja
 		Variable(BNVariableSourceType type, uint32_t index, uint64_t storage);
 		Variable(BNVariableSourceType type, uint64_t storage);
 		Variable(const BNVariable& var);
+		Variable(const Variable& var);
 
 		Variable& operator=(const Variable& var);
 

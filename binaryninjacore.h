@@ -2103,11 +2103,34 @@ extern "C"
 	BINARYNINJACOREAPI void BNAddOptionalPluginDependency(const char* name);
 
 	// Logging
+#ifdef __GNUC__
+__attribute__ ((format (printf, 2, 3)))
+#endif
 	BINARYNINJACOREAPI void BNLog(BNLogLevel level, const char* fmt, ...);
+
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	BINARYNINJACOREAPI void BNLogDebug(const char* fmt, ...);
+
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	BINARYNINJACOREAPI void BNLogInfo(const char* fmt, ...);
+
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	BINARYNINJACOREAPI void BNLogWarn(const char* fmt, ...);
+
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	BINARYNINJACOREAPI void BNLogError(const char* fmt, ...);
+
+#ifdef __GNUC__
+__attribute__ ((format (printf, 1, 2)))
+#endif
 	BINARYNINJACOREAPI void BNLogAlert(const char* fmt, ...);
 
 	BINARYNINJACOREAPI void BNRegisterLogListener(BNLogListener* listener);
@@ -2176,6 +2199,9 @@ extern "C"
 	BINARYNINJACOREAPI bool BNSaveAutoSnapshot(BNBinaryView* data);
 	BINARYNINJACOREAPI bool BNSaveAutoSnapshotWithProgress(BNBinaryView* data, void* ctxt,
 		void (*progress)(void* ctxt, size_t progress, size_t total));
+
+	BINARYNINJACOREAPI bool BNRebase(BNBinaryView* data, uint64_t address);
+	BINARYNINJACOREAPI bool BNRebaseWithProgress(BNBinaryView* data, uint64_t address, void* ctxt, void (*progress)(void* ctxt, size_t progress, size_t total));
 
 	BINARYNINJACOREAPI char* BNGetOriginalFilename(BNFileMetadata* file);
 	BINARYNINJACOREAPI void BNSetOriginalFilename(BNFileMetadata* file, const char* name);
