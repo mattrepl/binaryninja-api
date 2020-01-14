@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (c) 2015-2019 Vector 35 Inc
+# Copyright (c) 2015-2020 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -631,6 +631,15 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		return BinaryView(file_metadata=data.file, handle=view)
 
 	def open(self, src, file_metadata=None):
+		"""
+		``open`` opens an instance of a particular BinaryViewType and returns it, or None if not possible.
+
+		:param str src: path to filename or bndb to open
+		:param FileMetaData file_metadata: Optional parameter for a :py:class:`FileMetaData` object
+		:return: returns a :py:class:`BinaryView` object for the given filename
+		:rtype: :py:class:`BinaryView` or ``None``
+		"""
+
 		data = BinaryView.open(src, file_metadata)
 		if data is None:
 			return None
@@ -639,13 +648,13 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 	@classmethod
 	def get_view_of_file(cls, filename, update_analysis=True, progress_func=None):
 		"""
-		``get_view_of_file`` opens and returns the first available :class:`BinaryView`, excluding *'Raw'* :class:`BinaryViewType`s
+		``get_view_of_file`` opens and returns the first available :py:class:`BinaryView`, excluding a Raw :py:class:`BinaryViewType`
 
 		:param str filename: path to filename or bndb to open
-		:param bool update_analysis: whether or not to run :func:`update_analysis_and_wait` after opening a :class:`BinaryView`, defaults to ``True``
+		:param bool update_analysis: whether or not to run :func:`update_analysis_and_wait` after opening a :py:class:`BinaryView`, defaults to ``True``
 		:param callback progress_func: optional function to be called with the current progress and total count
-		:return: returns a :class:`BinaryView` object for the given filename
-		:rtype: :class:`BinaryView` or ``None``
+		:return: returns a :py:class:`BinaryView` object for the given filename
+		:rtype: :py:class:`BinaryView` or ``None``
 		"""
 		sqlite = b"SQLite format 3"
 		isDatabase = filename.endswith(".bndb")
@@ -681,19 +690,19 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 	def get_view_of_file_with_options(cls, filename, update_analysis=True, progress_func=None, options={}):
 		"""
 		``get_view_of_file_with_options`` opens, generates default load options (which are overridable), and returns the first available \
-		:class:`BinaryView`, excluding *'Raw'* :class:`BinaryViewType`s
+		:py:class:`BinaryView`, excluding any ``Raw`` :py:class:`BinaryViewType`
 
-		.. note:: Calling this method without providing options is not necessarily equivalent to simply calling :func:`get_view_of_file`. Since \
-		:class:`BinaryViewType`s are in control of generating load options, this method allows an alternative default way to open a file. For \
+		.. note:: Calling this method without providing options is not necessarily equivalent to simply calling :func:`get_view_of_file`. This is because \
+		:py:class:`BinaryViewType`s are in control of generating load options, this method allows an alternative default way to open a file. For \
 		example, opening a relocatable object file with :func:`get_view_of_file` sets **'loader.imageBase'** to 0, whereas opening with \
 		:func:`get_view_of_file_with_options` sets **'loader.imageBase'** to ``0x400000`` for 64-bit binaries, or ``0x10000`` for 32-bit binaries, by default.
 
 		:param str filename: path to filename or bndb to open
-		:param bool update_analysis: whether or not to run :func:`update_analysis_and_wait` after opening a :class:`BinaryView`, defaults to ``True``
+		:param bool update_analysis: whether or not to run :func:`update_analysis_and_wait` after opening a :py:class:`BinaryView`, defaults to ``True``
 		:param callback progress_func: optional function to be called with the current progress and total count
 		:param dict options: a dictionary in the form {setting identifier string : object value}
-		:return: returns a :class:`BinaryView` object for the given filename
-		:rtype: :class:`BinaryView` or ``None``
+		:return: returns a :py:class:`BinaryView` object for the given filename
+		:rtype: :py:class:`BinaryView` or ``None``
 
 		:Example:
 
@@ -701,11 +710,17 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 			<BinaryView: '/bin/ls', start 0xfffffff0000, len 0xa290>
 			>>>
 		"""
+		sqlite = b"SQLite format 3"
 		isDatabase = filename.endswith(".bndb")
 		if isDatabase:
-			log.log_warn("Opening a database with options is not yet supported!")
-			return None
-		view = BinaryView.open(filename)
+			f = open(filename, 'rb')
+			if f is None or f.read(len(sqlite)) != sqlite:
+				return None
+			f.close()
+			view = binaryninja.filemetadata.FileMetadata().open_database_for_configuration(filename)
+		else:
+			view = BinaryView.open(filename)
+
 		if view is None:
 			return None
 		bvt = None
@@ -1095,7 +1110,7 @@ class BinaryView(object):
 
 	To open a file with a given BinaryView the following code can be used::
 
-		>>> bv = BinaryViewType['Mach-O'].open("/bin/ls")
+		>>> bv = BinaryViewType.get_view_of_file("/bin/ls")
 		>>> bv
 		<BinaryView: '/bin/ls', start 0x100000000, len 0xa000>
 
@@ -1388,7 +1403,7 @@ class BinaryView(object):
 
 	@property
 	def file(self):
-		""":class:`.FileMetadata` backing the BinaryView """
+		""":py:class:`FileMetadata` backing the BinaryView """
 		return self._file
 
 	@file.setter
@@ -1397,7 +1412,7 @@ class BinaryView(object):
 
 	@property
 	def notifications(self):
-		""":class:`.FileMetadata` backing the BinaryView """
+		""":py:class:`FileMetadata` backing the BinaryView """
 		return self._notifications
 
 	@notifications.setter
@@ -1406,7 +1421,7 @@ class BinaryView(object):
 
 	@property
 	def next_address(self):
-		""":class:`.FileMetadata` backing the BinaryView """
+		""":py:class:`FileMetadata` backing the BinaryView """
 		return self._next_address
 
 	@next_address.setter
@@ -1430,7 +1445,7 @@ class BinaryView(object):
 
 	@property
 	def arch(self):
-		"""The architecture associated with the current :class:`.BinaryView` (read/write)"""
+		"""The architecture associated with the current :py:class:`BinaryView` (read/write)"""
 		arch = core.BNGetDefaultArchitecture(self.handle)
 		if arch is None:
 			return None
@@ -2450,7 +2465,7 @@ class BinaryView(object):
 		:Example:
 
 			>>> #Opening a x86_64 Mach-O binary
-			>>> bv = BinaryViewType['Raw'].open("/bin/ls")
+			>>> bv = BinaryViewType['Raw'].open("/bin/ls") #note that we are using open instead of get_view_of_file to get the raw view
 			>>> bv.read(0,4)
 			\'\\xcf\\xfa\\xed\\xfe\'
 		"""
@@ -4872,17 +4887,27 @@ class BinaryView(object):
 
 	def rebase(self, address, progress_func = None):
 		"""
-		``rebase`` rebase the binary view at the specified virtual address
+		``rebase`` rebase the existing BinaryView into a new BinaryView at the specified virtual address
+
+		.. note:: This method should not be called from the UI and is intended for headless operation only.
 
 		:param int address: virtual address of the start of the binary view
-		:return: boolean True on success, False on failure.
-		:rtype: bool
+		:return: the new BinaryView object or None on failure
+		:rtype: BinaryView or None
 		"""
+		result = False
+		if core.BNIsUIEnabled():
+			log.log_warn("The BinaryView.rebase API is for headless operation only.")
+			return False
 		if progress_func is None:
-			return core.BNRebase(self.handle, address)
+			result = core.BNRebase(self.handle, address)
 		else:
-			return core.BNRebaseWithProgress(self.handle, address, None, ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
+			result = core.BNRebaseWithProgress(self.handle, address, None, ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
 				lambda ctxt, cur, total: progress_func(cur, total)))
+		if result:
+			return self.get_view_of_type(self.view_type)
+		else:
+			return None
 
 	def show_plain_text_report(self, title, contents):
 		core.BNShowPlainTextReport(self.handle, title, contents)
@@ -4893,7 +4918,7 @@ class BinaryView(object):
 		applications. Markdown reports support hyperlinking into the BinaryView. Hyperlinks can be specified as follows:
 		``binaryninja://?expr=_start`` Where ``expr=`` specifies an expression parsable by the :py:meth:`parse_expression` API.
 
-		Note: This API function differently on the command-line vs the UI. In the UI a pop-up is used. On the command-line \
+		Note: This API functions differently on the command-line vs the UI. In the UI a pop-up is used. On the command-line \
 			a simple text prompt is used.
 
 		:param str contents: markdown contents to display
@@ -5139,10 +5164,10 @@ class BinaryView(object):
 
 	def get_load_settings_type_names(self):
 		"""
-		``get_load_settings_type_names`` retrieve a list :class:`BinaryViewType` names for which load settings exist in \
-		this :class:`BinaryView` context
+		``get_load_settings_type_names`` retrieve a list :py:class:`BinaryViewType` names for which load settings exist in \
+		this :py:class:`BinaryView` context
 
-		:return: list of :class:`BinaryViewType` names
+		:return: list of :py:class:`BinaryViewType` names
 		:rtype: list(str)
 		"""
 		result = []
@@ -5155,11 +5180,11 @@ class BinaryView(object):
 
 	def get_load_settings(self, type_name):
 		"""
-		``get_load_settings`` retrieve a :class:`Settings` object which defines the load settings for the given :class:`BinaryViewType` ``type_name``
+		``get_load_settings`` retrieve a :py:class:`Settings` object which defines the load settings for the given :py:class:`BinaryViewType` ``type_name``
 
-		:param str type_name: the :class:`BinaryViewType` name
+		:param str type_name: the :py:class:`BinaryViewType` name
 		:return: the load settings
-		:rtype: :class:`Settings`, or ``None``
+		:rtype: :py:class:`Settings`, or ``None``
 		"""
 		settings_handle = core.BNBinaryViewGetLoadSettings(self.handle, type_name)
 		if settings_handle is None:
@@ -5168,9 +5193,9 @@ class BinaryView(object):
 
 	def set_load_settings(self, type_name, settings):
 		"""
-		``set_load_settings`` set a :class:`Settings` object which defines the load settings for the given :class:`BinaryViewType` ``type_name``
+		``set_load_settings`` set a :py:class:`Settings` object which defines the load settings for the given :py:class:`BinaryViewType` ``type_name``
 
-		:param str type_name: the :class:`BinaryViewType` name
+		:param str type_name: the :py:class:`BinaryViewType` name
 		:param Settings settings: the load settings
 		:rtype: None
 		"""
@@ -5238,7 +5263,7 @@ class BinaryReader(object):
 	BinaryReader can be instantiated as follows and the rest of the document will start from this context ::
 
 		>>> from binaryninja import *
-		>>> bv = BinaryViewType['Mach-O'].open("/bin/ls")
+		>>> bv = BinaryViewType.get_view_of_file("/bin/ls")
 		>>> br = BinaryReader(bv)
 		>>> hex(br.read32())
 		'0xfeedfacfL'
@@ -5557,14 +5582,17 @@ class BinaryWriter(object):
 	BinaryWriter can be instantiated as follows and the rest of the document will start from this context ::
 
 		>>> from binaryninja import *
-		>>> bv = BinaryViewType['Mach-O'].open("/bin/ls")
+		>>> bv = BinaryViewType.get_view_of_file("/bin/ls")
 		>>> br = BinaryReader(bv)
+		>>> br.offset
+		4294967296
 		>>> bw = BinaryWriter(bv)
 		>>>
 
 	Or using the optional endian parameter ::
 
 		>>> from binaryninja import *
+		>>> bv = BinaryViewType.get_view_of_file("/bin/ls")
 		>>> br = BinaryReader(bv, Endianness.BigEndian)
 		>>> bw = BinaryWriter(bv, Endianness.BigEndian)
 		>>>
@@ -5846,7 +5874,7 @@ class StructuredDataView(object):
 		StructuredDataView can be instantiated as follows:
 
 			>>> from binaryninja import *
-			>>> bv = BinaryViewType['Mach-O'].open("/bin/ls")
+			>>> bv = BinaryViewType.get_view_of_file("/bin/ls")
 			>>> structure = "Elf64_Header"
 			>>> address = bv.start
 			>>> elf = StructuredDataView(bv, structure, address)

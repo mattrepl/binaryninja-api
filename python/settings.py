@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2019 Vector 35 Inc
+# Copyright (c) 2015-2020 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -65,7 +65,7 @@ class Settings(object):
 
 	def __init__(self, instance_id = "default", handle = None):
 		if handle is None:
-			if instance_id is None or instance_id is "":
+			if instance_id is None or instance_id == "":
 				instance_id = "default"
 			self._instance_id = instance_id
 			if instance_id == "default":

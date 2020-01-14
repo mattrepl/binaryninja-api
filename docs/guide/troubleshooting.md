@@ -60,7 +60,29 @@ The below steps are specific to different platforms that Binary Ninja runs on.  
 - If you install Windows without internet access and have never run windows updates to install an update, you may have an incomplete windows certificate store. You'll see errors when attempting to update about `CERTIFICATE VERIFICATION FAILED`.  If that is the case, you can either use something like `certutil.exe -generateSSTFromWU roots.sst` and then manually copy over the DST and Amazon certificates into your root store, or wait until the next time you have an update from Windows Update which should automatically refresh your certificate store. 
 
 
-### OS X
+### MacOS
+
+#### Xcode Installed Python 3
+
+If you're running Catlina MacOS with the Python 3 installed by XCode and wish to use that version of Python with Binary Ninja, you'll need to do the following:
+
+1. Set the PYTHONHOME environment variable for your user to the following: `PYTHONHOME=/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.7`
+1. If you have an existing `settings.json` in `~/Library/Application Support/Binary Ninja/` merge the below, or create it with these contents if it does not exist:
+
+```
+{
+	"downloadClient" :
+	{
+		"providerName" : "QtDownloadProvider"
+	},
+	"python" :
+	{
+		"interpreter" : "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.7/lib/libpython3.7.dylib"
+	}
+}
+```
+
+#### Old MacOS
 
 While OS X is generally the most trouble-free environment for Binary Ninja, very old versions may have problems with the RPATH for our binaries and libraries. There are two solutions. First, run Binary Ninja with: 
 
@@ -144,3 +166,4 @@ stdenv.mkDerivation rec {
 [FAQ]: https://binary.ninja/faq.html
 [purchase]: https://binary.ninja/purchase.html
 [unofficial script]: https://gist.github.com/0x1F9F1/64725fbe9acdeafaf39e048e03f4dd9d
+

@@ -7,6 +7,9 @@ import inspect
 import binaryninja as binja
 from binaryninja.binaryview import BinaryViewType, BinaryView
 from binaryninja.filemetadata import FileMetadata
+from binaryninja.datarender import DataRenderer
+from binaryninja.function import InstructionTextToken, DisassemblyTextLine
+from binaryninja.enums import InstructionTextTokenType
 import subprocess
 import re
 
@@ -186,8 +189,29 @@ class BinaryViewTestBuilder(Builder):
                     retinfo.append("Function: {:x} Instruction: {:x} Mapped MLIL: {}".format(func.start, ins.address, str(ins.mapped_medium_level_il)))
                     retinfo.append("Function: {:x} Instruction: {:x} Value: {}".format(func.start, ins.address, str(ins.value)))
                     retinfo.append("Function: {:x} Instruction: {:x} Possible Values: {}".format(func.start, ins.address, str(ins.possible_values)))
-                    retinfo.append("Function: {:x} Instruction: {:x} Prefix operands: {}".format(func.start, ins.address, str(ins.prefix_operands)))
-                    retinfo.append("Function: {:x} Instruction: {:x} Postfix operands: {}".format(func.start, ins.address, str(ins.postfix_operands)))
+
+                    prefixList = []
+                    for i in ins.prefix_operands:
+                        if isinstance(i, dict):
+                            contents = []
+                            for j in sorted(i.keys()):
+                                contents.append((j, i[j]))
+                            prefixList.append(str(contents))
+                        else:
+                            prefixList.append(i)
+                    retinfo.append("Function: {:x} Instruction: {:x} Prefix operands: {}".format(func.start, ins.address, str(prefixList)))
+
+                    postfixList = []
+                    for i in ins.postfix_operands:
+                        if isinstance(i, dict):
+                            contents = []
+                            for j in sorted(i.keys()):
+                                contents.append((j, i[j]))
+                            postfixList.append(str(contents))
+                        else:
+                            postfixList.append(i)
+                    retinfo.append("Function: {:x} Instruction: {:x} Postfix operands: {}".format(func.start, ins.address, str(postfixList)))
+
                     retinfo.append("Function: {:x} Instruction: {:x} SSA form: {}".format(func.start, ins.address, str(ins.ssa_form)))
                     retinfo.append("Function: {:x} Instruction: {:x} Non-SSA form: {}".format(func.start, ins.address, str(ins.non_ssa_form)))
         return fixOutput(retinfo)
@@ -233,15 +257,25 @@ class BinaryViewTestBuilder(Builder):
                             prefixList.append(str(round(i, 21)))
                         elif isinstance(i, float):
                             prefixList.append(str(round(i, 11)))
+                        elif isinstance(i, dict):
+                            contents = []
+                            for j in sorted(i.keys()):
+                                contents.append((j, i[j]))
+                            prefixList.append(str(contents))
                         else:
                             prefixList.append(str(i))
                     retinfo.append("Function: {:x} Instruction: {:x} Prefix operands:  {}".format(func.start, ins.address, str(sorted(prefixList))))
                     postfixList = []
-                    for i in ins.prefix_operands:
+                    for i in ins.postfix_operands:
                         if isinstance(i, float) and 'e' in str(i):
                             postfixList.append(str(round(i, 21)))
                         elif isinstance(i, float):
                             postfixList.append(str(round(i, 11)))
+                        elif isinstance(i, dict):
+                            contents = []
+                            for j in sorted(i.keys()):
+                                contents.append((j, i[j]))
+                            postfixList.append(str(contents))
                         else:
                             postfixList.append(str(i))
 
@@ -614,6 +648,32 @@ class TestBuilder(Builder):
         file_name = self.unpackage_file("helloworld")
         try:
             bv = binja.BinaryViewType['ELF'].open(file_name)
+            disass = bv.linear_disassembly
+            retinfo = []
+            for i in disass:
+                i = str(i)
+                i = remove_low_confidence(i)
+                retinfo.append(i)
+            return retinfo
+        finally:
+            self.delete_package("helloworld")
+
+    def test_data_renderer(self):
+        """data renderer produced different result"""
+        file_name = self.unpackage_file("helloworld")
+        class ElfHeaderDataRenderer(DataRenderer):
+            def __init__(self):
+                DataRenderer.__init__(self)
+            def perform_is_valid_for_data(self, ctxt, view, addr, type, context):
+                return DataRenderer.is_type_of_struct_name(type, "Elf64_Header", context)
+            def perform_get_lines_for_data(self, ctxt, view, addr, type, prefix, width, context):
+                prefix.append(InstructionTextToken(InstructionTextTokenType.TextToken, "I'm in ur Elf64_Header"))
+                return [DisassemblyTextLine(prefix, addr)]
+            def __del__(self):
+                pass
+        try:
+            bv = binja.BinaryViewType['ELF'].open(file_name)
+            ElfHeaderDataRenderer().register_type_specific()
             disass = bv.linear_disassembly
             retinfo = []
             for i in disass:

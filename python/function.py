@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (c) 2015-2019 Vector 35 Inc
+# Copyright (c) 2015-2020 Vector 35 Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -537,7 +537,7 @@ class Variable(object):
 
 	@property
 	def function(self):
-		""" """
+		"""Function where the variable is defined"""
 		return self._function
 
 	@function.setter
@@ -546,7 +546,7 @@ class Variable(object):
 
 	@property
 	def source_type(self):
-		""" """
+		""":class:`~enums.VariableSourceType`"""
 		return self._source_type
 
 	@source_type.setter
@@ -564,7 +564,7 @@ class Variable(object):
 
 	@property
 	def storage(self):
-		""" """
+		"""Stack offset for StackVariableSourceType, register index for RegisterVariableSourceType"""
 		return self._storage
 
 	@storage.setter
@@ -582,7 +582,7 @@ class Variable(object):
 
 	@property
 	def name(self):
-		""" """
+		"""Name of the variable"""
 		return self._name
 
 	@name.setter
