@@ -70,7 +70,7 @@
 
 #define BN_INVALID_EXPR             ((size_t)-1)
 
-#define BN_MAX_STRING_LENGTH         128
+#define BN_MAX_STRING_LENGTH        128
 
 #define LLVM_SVCS_CB_NOTE 0
 #define LLVM_SVCS_CB_WARNING 1
@@ -3075,6 +3075,8 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNSetDisassemblyWidth(BNDisassemblySettings* settings, size_t width);
 	BINARYNINJACOREAPI size_t BNGetDisassemblyMaximumSymbolWidth(BNDisassemblySettings* settings);
 	BINARYNINJACOREAPI void BNSetDisassemblyMaximumSymbolWidth(BNDisassemblySettings* settings, size_t width);
+	BINARYNINJACOREAPI size_t BNGetDisassemblyGutterWidth(BNDisassemblySettings* settings);
+	BINARYNINJACOREAPI void BNSetDisassemblyGutterWidth(BNDisassemblySettings* settings, size_t width);
 
 	// Flow graphs
 	BINARYNINJACOREAPI BNFlowGraph* BNCreateFlowGraph();
