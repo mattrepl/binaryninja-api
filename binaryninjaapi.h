@@ -897,16 +897,16 @@ __attribute__ ((format (printf, 1, 2)))
 		void MarkFileSaved();
 
 		bool IsBackedByDatabase() const;
-		bool CreateDatabase(const std::string& name, BinaryView* data);
+		bool CreateDatabase(const std::string& name, BinaryView* data, bool clean = false);
 		bool CreateDatabase(const std::string& name, BinaryView* data,
-			const std::function<void(size_t progress, size_t total)>& progressCallback);
+			const std::function<void(size_t progress, size_t total)>& progressCallback, bool clean = false);
 		Ref<BinaryView> OpenExistingDatabase(const std::string& path);
 		Ref<BinaryView> OpenExistingDatabase(const std::string& path,
 			const std::function<void(size_t progress, size_t total)>& progressCallback);
 		Ref<BinaryView> OpenDatabaseForConfiguration(const std::string& path);
-		bool SaveAutoSnapshot(BinaryView* data);
+		bool SaveAutoSnapshot(BinaryView* data, bool clean = false);
 		bool SaveAutoSnapshot(BinaryView* data,
-			const std::function<void(size_t progress, size_t total)>& progressCallback);
+			const std::function<void(size_t progress, size_t total)>& progressCallback, bool clean = false);
 
 		bool Rebase(BinaryView* data, uint64_t address);
 		bool Rebase(BinaryView* data, uint64_t address, const std::function<void(size_t progress, size_t total)>& progressCallback);
@@ -1452,11 +1452,11 @@ __attribute__ ((format (printf, 1, 2)))
 		bool IsModified() const;
 		bool IsAnalysisChanged() const;
 		bool IsBackedByDatabase() const;
-		bool CreateDatabase(const std::string& path);
+		bool CreateDatabase(const std::string& path, bool clean = false);
 		bool CreateDatabase(const std::string& path,
-			const std::function<void(size_t progress, size_t total)>& progressCallback);
-		bool SaveAutoSnapshot();
-		bool SaveAutoSnapshot(const std::function<void(size_t progress, size_t total)>& progressCallback);
+			const std::function<void(size_t progress, size_t total)>& progressCallback, bool clean = false);
+		bool SaveAutoSnapshot(bool clean = false);
+		bool SaveAutoSnapshot(const std::function<void(size_t progress, size_t total)>& progressCallback, bool clean = false);
 
 		void BeginUndoActions();
 		void AddUndoAction(UndoAction* action);
@@ -1784,6 +1784,7 @@ __attribute__ ((format (printf, 1, 2)))
 		std::string m_nameForRegister, m_longNameForRegister;
 
 		static BNBinaryView* CreateCallback(void* ctxt, BNBinaryView* data);
+		static BNBinaryView* ParseCallback(void* ctxt, BNBinaryView* data);
 		static bool IsValidCallback(void* ctxt, BNBinaryView* data);
 		static BNSettings* GetSettingsCallback(void* ctxt, BNBinaryView* data);
 
@@ -1812,6 +1813,7 @@ __attribute__ ((format (printf, 1, 2)))
 		std::string GetLongName();
 
 		virtual BinaryView* Create(BinaryView* data) = 0;
+		virtual BinaryView* Parse(BinaryView* data) = 0;
 		virtual bool IsTypeValidForData(BinaryView* data) = 0;
 		virtual Ref<Settings> GetLoadSettingsForData(BinaryView* data) = 0;
 	};
@@ -1821,6 +1823,7 @@ __attribute__ ((format (printf, 1, 2)))
 	public:
 		CoreBinaryViewType(BNBinaryViewType* type);
 		virtual BinaryView* Create(BinaryView* data) override;
+		virtual BinaryView* Parse(BinaryView* data) override;
 		virtual bool IsTypeValidForData(BinaryView* data) override;
 		virtual Ref<Settings> GetLoadSettingsForData(BinaryView* data) override;
 	};
@@ -2481,6 +2484,7 @@ __attribute__ ((format (printf, 1, 2)))
 		Confidence<BNMemberAccess> GetAccess() const;
 		Confidence<int64_t> GetStackAdjustment() const;
 		QualifiedName GetStructureName() const;
+		Ref<NamedTypeReference> GetRegisteredName() const;
 
 		uint64_t GetElementCount() const;
 		uint64_t GetOffset() const;
@@ -3048,17 +3052,20 @@ __attribute__ ((format (printf, 1, 2)))
 		std::vector<IndirectBranchInfo> GetIndirectBranches();
 		std::vector<IndirectBranchInfo> GetIndirectBranchesAt(Architecture* arch, uint64_t addr);
 
+		void SetAutoCallTypeAdjustment(Architecture* arch, uint64_t addr, const Confidence<Ref<Type>>& adjust);
 		void SetAutoCallStackAdjustment(Architecture* arch, uint64_t addr, const Confidence<int64_t>& adjust);
 		void SetAutoCallRegisterStackAdjustment(Architecture* arch, uint64_t addr,
 			const std::map<uint32_t, Confidence<int32_t>>& adjust);
 		void SetAutoCallRegisterStackAdjustment(Architecture* arch, uint64_t addr, uint32_t regStack,
 			const Confidence<int32_t>& adjust);
+		void SetUserCallTypeAdjustment(Architecture* arch, uint64_t addr, const Confidence<Ref<Type>>& adjust);
 		void SetUserCallStackAdjustment(Architecture* arch, uint64_t addr, const Confidence<int64_t>& adjust);
 		void SetUserCallRegisterStackAdjustment(Architecture* arch, uint64_t addr,
 			const std::map<uint32_t, Confidence<int32_t>>& adjust);
 		void SetUserCallRegisterStackAdjustment(Architecture* arch, uint64_t addr, uint32_t regStack,
 			const Confidence<int32_t>& adjust);
 
+		Confidence<Ref<Type>> GetCallTypeAdjustment(Architecture* arch, uint64_t addr);
 		Confidence<int64_t> GetCallStackAdjustment(Architecture* arch, uint64_t addr);
 		std::map<uint32_t, Confidence<int32_t>> GetCallRegisterStackAdjustment(Architecture* arch, uint64_t addr);
 		Confidence<int32_t> GetCallRegisterStackAdjustment(Architecture* arch, uint64_t addr, uint32_t regStack);

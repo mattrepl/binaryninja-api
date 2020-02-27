@@ -747,6 +747,12 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 			bv.update_analysis_and_wait()
 		return bv
 
+	def parse(self, data):
+		view = core.BNParseBinaryViewOfType(self.handle, data.handle)
+		if view is None:
+			return None
+		return BinaryView(file_metadata=data.file, handle=view)
+
 	def is_valid_for_data(self, data):
 		return core.BNIsBinaryViewTypeValidForData(self.handle, data.handle)
 
@@ -1211,6 +1217,7 @@ class BinaryView(object):
 		cls._registered_cb = core.BNCustomBinaryViewType()
 		cls._registered_cb.context = 0
 		cls._registered_cb.create = cls._registered_cb.create.__class__(cls._create)
+		cls._registered_cb.parse = cls._registered_cb.parse.__class__(cls._parse)
 		cls._registered_cb.isValidForData = cls._registered_cb.isValidForData.__class__(cls._is_valid_for_data)
 		cls._registered_cb.getLoadSettingsForData = cls._registered_cb.getLoadSettingsForData.__class__(cls._get_load_settings_for_data)
 		cls.registered_view_type = BinaryViewType(core.BNRegisterBinaryViewType(cls.name, cls.long_name, cls._registered_cb))
@@ -1223,6 +1230,22 @@ class BinaryView(object):
 			view = cls(BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))
 			if view is None:
 				return None
+			# FIXME: There is probably a better way to convey this information...
+			view.__dict__.update({'parse_only' : False})
+			return ctypes.cast(core.BNNewViewReference(view.handle), ctypes.c_void_p).value
+		except:
+			log.log_error(traceback.format_exc())
+			return None
+
+	@classmethod
+	def _parse(cls, ctxt, data):
+		try:
+			file_metadata = binaryninja.filemetadata.FileMetadata(handle=core.BNGetFileForView(data))
+			view = cls(BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))
+			if view is None:
+				return None
+			# FIXME: There is probably a better way to convey this information...
+			view.__dict__.update({'parse_only' : True})
 			return ctypes.cast(core.BNNewViewReference(view.handle), ctypes.c_void_p).value
 		except:
 			log.log_error(traceback.format_exc())
@@ -2318,28 +2341,30 @@ class BinaryView(object):
 		"""
 		return False
 
-	def create_database(self, filename, progress_func=None):
+	def create_database(self, filename, progress_func=None, clean=False):
 		"""
 		``create_database`` writes the current database (.bndb) file out to the specified file.
 
 		:param str filename: path and filename to write the bndb to, this string `should` have ".bndb" appended to it.
 		:param callback progress_func: optional function to be called with the current progress and total count.
+		:param bool clean: optional argument to determine if undo data is saved in the database.
 		:return: true on success, false on failure
 		:rtype: bool
 		"""
-		return self._file.create_database(filename, progress_func)
+		return self._file.create_database(filename, progress_func, clean)
 
-	def save_auto_snapshot(self, progress_func=None):
+	def save_auto_snapshot(self, progress_func=None, clean=False):
 		"""
 		``save_auto_snapshot`` saves the current database to the already created file.
 
 		.. note:: :py:meth:`create_database` should have been called prior to executing this method
 
 		:param callback progress_func: optional function to be called with the current progress and total count.
+		:param bool clean: optional argument to determine if undo data is saved in the database.
 		:return: True if it successfully saved the snapshot, False otherwise
 		:rtype: bool
 		"""
-		return self._file.save_auto_snapshot(progress_func)
+		return self._file.save_auto_snapshot(progress_func, clean)
 
 	def get_view_of_type(self, name):
 		"""
@@ -4283,13 +4308,13 @@ class BinaryView(object):
 		"""
 		return core.BNGetPreviousDataVariableStartBeforeAddress(self.handle, addr)
 
-	def get_linear_disassembly_position_at(self, addr, settings):
+	def get_linear_disassembly_position_at(self, addr, settings=None):
 		"""
 		``get_linear_disassembly_position_at`` instantiates a :py:class:`LinearDisassemblyPosition <binaryninja.lineardisassembly.LinearDisassemblyPosition>` object for use in
 		:py:meth:`get_previous_linear_disassembly_lines` or :py:meth:`get_next_linear_disassembly_lines`.
 
 		:param int addr: virtual address of linear disassembly position
-		:param DisassemblySettings settings: an instantiated :py:class:`DisassemblySettings` object
+		:param DisassemblySettings settings: an instantiated :py:class:`DisassemblySettings` object, defaults to None which will use default settings
 		:return: An instantiated :py:class:`LinearDisassemblyPosition` object for the provided virtual address
 		:rtype: LinearDisassemblyPosition
 		:Example:
@@ -4312,7 +4337,7 @@ class BinaryView(object):
 			block = basicblock.BasicBlock(pos.block, self)
 		return lineardisassembly.LinearDisassemblyPosition(func, block, pos.address)
 
-	def _get_linear_disassembly_lines(self, api, pos, settings):
+	def _get_linear_disassembly_lines(self, api, pos, settings=None):
 		pos_obj = core.BNLinearDisassemblyPosition()
 		pos_obj.function = None
 		pos_obj.block = None
@@ -4355,14 +4380,14 @@ class BinaryView(object):
 		core.BNFreeLinearDisassemblyLines(lines, count.value)
 		return result
 
-	def get_previous_linear_disassembly_lines(self, pos, settings):
+	def get_previous_linear_disassembly_lines(self, pos, settings=None):
 		"""
 		``get_previous_linear_disassembly_lines`` retrieves a list of :py:class:`LinearDisassemblyLine` objects for the
 		previous disassembly lines, and updates the LinearDisassemblyPosition passed in. This function can be called
 		repeatedly to get more lines of linear disassembly.
 
 		:param LinearDisassemblyPosition pos: Position to start retrieving linear disassembly lines from
-		:param DisassemblySettings settings: DisassemblySettings display settings for the linear disassembly
+		:param DisassemblySettings settings: DisassemblySettings display settings for the linear disassembly, defaults to None which will use default settings
 		:return: a list of :py:class:`LinearDisassemblyLine` objects for the previous lines.
 		:Example:
 
@@ -4375,14 +4400,14 @@ class BinaryView(object):
 		"""
 		return self._get_linear_disassembly_lines(core.BNGetPreviousLinearDisassemblyLines, pos, settings)
 
-	def get_next_linear_disassembly_lines(self, pos, settings):
+	def get_next_linear_disassembly_lines(self, pos, settings=None):
 		"""
 		``get_next_linear_disassembly_lines`` retrieves a list of :py:class:`LinearDisassemblyLine` objects for the
 		next disassembly lines, and updates the LinearDisassemblyPosition passed in. This function can be called
 		repeatedly to get more lines of linear disassembly.
 
 		:param LinearDisassemblyPosition pos: Position to start retrieving linear disassembly lines from
-		:param DisassemblySettings settings: DisassemblySettings display settings for the linear disassembly
+		:param DisassemblySettings settings: DisassemblySettings display settings for the linear disassembly, defaults to None which will use default settings
 		:return: a list of :py:class:`LinearDisassemblyLine` objects for the next lines.
 		:Example:
 
@@ -4396,7 +4421,7 @@ class BinaryView(object):
 		"""
 		return self._get_linear_disassembly_lines(core.BNGetNextLinearDisassemblyLines, pos, settings)
 
-	def get_linear_disassembly(self, settings):
+	def get_linear_disassembly(self, settings=None):
 		"""
 		``get_linear_disassembly`` gets an iterator for all lines in the linear disassembly of the view for the given
 		disassembly settings.
@@ -4404,7 +4429,7 @@ class BinaryView(object):
 		.. note:: linear_disassembly doesn't just return disassembly it will return a single line from the linear view,\
 		 and thus will contain both data views, and disassembly.
 
-		:param DisassemblySettings settings: instance specifying the desired output formatting.
+		:param DisassemblySettings settings: instance specifying the desired output formatting. Defaults to None which will use default settings.
 		:return: An iterator containing formatted disassembly lines.
 		:rtype: LinearDisassemblyIterator
 		:Example:

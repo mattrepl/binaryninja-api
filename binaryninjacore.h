@@ -1145,6 +1145,7 @@ extern "C"
 	{
 		void* context;
 		BNBinaryView* (*create)(void* ctxt, BNBinaryView* data);
+		BNBinaryView* (*parse)(void* ctxt, BNBinaryView* data);
 		bool (*isValidForData)(void* ctxt, BNBinaryView* data);
 		BNSettings* (*getLoadSettingsForData)(void* ctxt, BNBinaryView* data);
 	};
@@ -2206,16 +2207,16 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNMarkFileSaved(BNFileMetadata* file);
 
 	BINARYNINJACOREAPI bool BNIsBackedByDatabase(BNFileMetadata* file);
-	BINARYNINJACOREAPI bool BNCreateDatabase(BNBinaryView* data, const char* path);
+	BINARYNINJACOREAPI bool BNCreateDatabase(BNBinaryView* data, const char* path, bool clean);
 	BINARYNINJACOREAPI bool BNCreateDatabaseWithProgress(BNBinaryView* data, const char* path,
-		void* ctxt, void (*progress)(void* ctxt, size_t progress, size_t total));
+		void* ctxt, void (*progress)(void* ctxt, size_t progress, size_t total), bool clean);
 	BINARYNINJACOREAPI BNBinaryView* BNOpenExistingDatabase(BNFileMetadata* file, const char* path);
 	BINARYNINJACOREAPI BNBinaryView* BNOpenExistingDatabaseWithProgress(BNFileMetadata* file, const char* path,
 		void* ctxt, void (*progress)(void* ctxt, size_t progress, size_t total));
 	BINARYNINJACOREAPI BNBinaryView* BNOpenDatabaseForConfiguration(BNFileMetadata* file, const char* path);
-	BINARYNINJACOREAPI bool BNSaveAutoSnapshot(BNBinaryView* data);
+	BINARYNINJACOREAPI bool BNSaveAutoSnapshot(BNBinaryView* data, bool clean);
 	BINARYNINJACOREAPI bool BNSaveAutoSnapshotWithProgress(BNBinaryView* data, void* ctxt,
-		void (*progress)(void* ctxt, size_t progress, size_t total));
+		void (*progress)(void* ctxt, size_t progress, size_t total), bool clean);
 
 	BINARYNINJACOREAPI bool BNRebase(BNBinaryView* data, uint64_t address);
 	BINARYNINJACOREAPI bool BNRebaseWithProgress(BNBinaryView* data, uint64_t address, void* ctxt, void (*progress)(void* ctxt, size_t progress, size_t total));
@@ -2385,6 +2386,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI char* BNGetBinaryViewTypeName(BNBinaryViewType* type);
 	BINARYNINJACOREAPI char* BNGetBinaryViewTypeLongName(BNBinaryViewType* type);
 	BINARYNINJACOREAPI BNBinaryView* BNCreateBinaryViewOfType(BNBinaryViewType* type, BNBinaryView* data);
+	BINARYNINJACOREAPI BNBinaryView* BNParseBinaryViewOfType(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI bool BNIsBinaryViewTypeValidForData(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI BNSettings* BNGetBinaryViewDefaultLoadSettingsForData(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI BNSettings* BNGetBinaryViewLoadSettingsForData(BNBinaryViewType* type, BNBinaryView* data);
@@ -2861,6 +2863,10 @@ __attribute__ ((format (printf, 1, 2)))
 	                                                                 uint64_t addr, size_t* count);
 	BINARYNINJACOREAPI void BNFreeIndirectBranchList(BNIndirectBranchInfo* branches);
 
+	BINARYNINJACOREAPI void BNSetAutoCallTypeAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr,
+		BNTypeWithConfidence* type);
+	BINARYNINJACOREAPI void BNSetUserCallTypeAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr,
+		BNTypeWithConfidence* type);
 	BINARYNINJACOREAPI void BNSetAutoCallStackAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr,
 		int64_t adjust, uint8_t confidence);
 	BINARYNINJACOREAPI void BNSetUserCallStackAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr,
@@ -2874,6 +2880,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNSetUserCallRegisterStackAdjustmentForRegisterStack(BNFunction* func,
 		BNArchitecture* arch, uint64_t addr, uint32_t regStack, int32_t adjust, uint8_t confidence);
 
+	BINARYNINJACOREAPI BNTypeWithConfidence BNGetCallTypeAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr);
 	BINARYNINJACOREAPI BNOffsetWithConfidence BNGetCallStackAdjustment(BNFunction* func, BNArchitecture* arch, uint64_t addr);
 	BINARYNINJACOREAPI BNRegisterStackAdjustment* BNGetCallRegisterStackAdjustment(BNFunction* func,
 		BNArchitecture* arch, uint64_t addr, size_t* count);
@@ -3582,6 +3589,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI BNMemberAccessWithConfidence BNTypeGetMemberAccess(BNType* type);
 	BINARYNINJACOREAPI BNOffsetWithConfidence BNGetTypeStackAdjustment(BNType* type);
 	BINARYNINJACOREAPI BNQualifiedName BNTypeGetStructureName(BNType* type);
+	BINARYNINJACOREAPI BNNamedTypeReference* BNGetRegisteredTypeName(BNType* type);
 
 	BINARYNINJACOREAPI char* BNGetTypeString(BNType* type, BNPlatform* platform);
 	BINARYNINJACOREAPI char* BNGetTypeStringBeforeName(BNType* type, BNPlatform* platform);

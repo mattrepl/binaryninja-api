@@ -1197,6 +1197,13 @@ class LowLevelILFunction(object):
 			return True
 		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
 
+	def __repr__(self):
+		arch = self.source_function.arch
+		if arch:
+			return "<llil func: %s@%#x>" % (arch.name, self.source_function.start)
+		else:
+			return "<llil func: %#x>" % self.source_function.start
+
 	@property
 	def current_address(self):
 		"""Current IL Address (read/write)"""
@@ -1304,8 +1311,10 @@ class LowLevelILFunction(object):
 		# for backwards compatibility
 		if isinstance(i, LowLevelILInstruction):
 			return i
-		if (i < 0) or (i >= len(self)):
+		if i < -len(self) or i >= len(self):
 			raise IndexError("index out of range")
+		if i < 0:
+			i = len(self) + i
 		return LowLevelILInstruction(self, core.BNGetLowLevelILIndexForInstruction(self.handle, i), i)
 
 	def __setitem__(self, i, j):
