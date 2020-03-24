@@ -58,10 +58,16 @@ You can load files in many ways:
 2. Use the `File/Open` menu or `Open` button on the start screen (`CMD-o` or `CTL-o`)
 3. Use the `File/Open with Options` menu which allows you to customize the analysis options (`CMD-SHIFT-o` or `CTL-SHIFT-o`)
 4. Open a file from the Triage picker (`File/Open for Triage`) which enables several minimal analysis options and shows a summary view first
-5. Clicking an item in the recent files list (hold `CMD`/`CTL` and `SHIFT` while clicking to use the `Open with Options` workflow)
-6. Running Binary Ninja with an optional command-line parameter
-7. Opening a file from a URL via the `CMD-l` or `CTRL-l` hot key
-8. Opening a file using the binaryninja: URL handler. For security reasons, the URL handler requires you to confirm a warning before opening a file via the URL handler. The URL handler can open remote URLs like: `binaryninja:https://captf2.captf.com/2015/plaidctf/pwnable/datastore_7e64104f876f0aa3f8330a409d9b9924.elf`, or even local files like `binaryninja://bin/ls` in cases where you wish to script up Binary Ninja from a local web application.
+5. Click an item in the recent files list (hold `CMD`/`CTL` and `SHIFT` while clicking to use the `Open with Options` workflow)
+6. Run Binary Ninja with an optional command-line parameter
+7. Open a file from a URL via the `CMD-l` or `CTRL-l` hot key
+8. Open a file using the `binaryninja:` URL handler. For security reasons, the URL handler requires you to confirm a warning before opening a file via the URL handler. URLs additionally support deep linking using the `expr` query parameter where expression value is a valid parsable expression such as those possible in the [navigation dialog](#navigating), and fully documented in the [`parse_expression`](https://api.binary.ninja/binaryninja.binaryview-module.html?highlight=parse_expression#binaryninja.binaryview.BinaryView.parse_expression) API. Below a few examples are provided:
+    * URLs For referencing files on the local file system.
+        * `binaryninja:///bin/ls?expr=sub_2830` - open the given file and navigate to the function: `sub_2830`
+        * `binaryninja:///bin/ls?expr=.text` - open the given file and navigate to the start address of the `.text` section
+        * `binaryninja:///bin/ls?expr=.text+6b` - open the given file and navigate to the hexadecimal offset `6b` from the `.text` section.
+    * URLs For referencing remote file files either the url should be prefixed with `binaryninja:` and optionally suffixed with the `expr` query parameter
+        * `binaryninja:file://<remote_path>?expr=[.data + 400]` - Download the remote file and navigate to the address at `.data` plus `0x400`
 
 ## Analysis
 
@@ -83,9 +89,12 @@ Additionally, using the [open with options](#loading-files) feature allows for c
 
 ### Navigating
 
-Navigating code in Binary Ninja is usually a case of just double-clicking where you want to go. Addresses, references, functions, jmp edges, etc, can all be double-clicked to navigate. Additionally, The `g` hot key can navigate to a specific address in the current view.
 
-![graph view](img/view-choices.png "Different Views")
+![navigation >](img/navigation.png "Navigation") <br>
+Navigating code in Binary Ninja is usually a case of just double-clicking where you want to go. Addresses, references, functions, jmp edges, etc, can all be double-clicked to navigate. Additionally, The `g` hot key can navigate to a specific address in the current view. Syntax for this field is very flexible. Full expressions can be entered including basic arithmetic, dereferencing, and name resolution (funciton names, data variable names, segment names, etc). Numerics default to hexadecimal but that can be controlled as well. Full documentation on the syntax of this field can be found [here](https://api.binary.ninja/binaryninja.binaryview-module.html?highlight=parse_expression#binaryninja.binaryview.BinaryView.parse_expression).
+<br><br><br><br>
+### Switching Views
+![graph view >](img/view-choices.png "Different Views")
 
 Switching views happens multiple ways. In some instances, it is automatic (clicking a data reference from graph view will navigate to linear view as data is not shown in the graph view), and there are multiple ways to manually change views as well. While navigating, you can use the view hot keys (see below) to switch to a specific view at the same location as the current selection. Alternatively, the view menu in the bottom-right can be used to change views without navigating to any given location.
 
@@ -199,13 +208,52 @@ The hexadecimal view is useful for view raw binary files that may or may not eve
 !!! Tip "Tip"
     Any changes made in the Hex view will take effect immediately in any other views open into the same file (new views can be created via the `Split to new tab`, or `Split to new window` options under `View`.). This can, however, cause large amounts of re-analysis so be warned before making large edits or transformations in a large binary file.
 
-### Xrefs View
+### Cross References Pane
 
-![xrefs <](img/xrefs.png "xrefs")
+![Cross Reference Tree <](img/cross-reference-tree.png "xrefs tree")
 
-The xrefs view in the lower-left shows all cross-references to a given location or reference. Note that the cross-references pane will change depending on whether an entire line is selected (all cross-references to that address are shown), or whether a specific token within the line is selected.
+The xrefs view in the lower-left shows all cross-references to the currently selected address or address range. Additionally this pane will change depending on whether an entire line is selected (all cross-references to that address are shown), or whether a specific token within the line is selected. For instance if you click on the symbol `memmove` in `call memmove` it will display all known cross-references to `memmove`, whereas if you click on the line the `call` instruction is on, you will only get cross-references to the address of the call instruction. Cross-references can be either incoming or outgoing, and they can be either data or code. To be explicit:
 
-One fun trick that the xrefs view has up its sleeve: when in [Hex View](#hex-view), a large range of memory addresses can be selected and the xrefs pane will show all xrefs to any location within that range of data.
+* Incoming-Data References - The reference is a data variable pointing to this location.
+* Incoming-Code References - The reference is a pointer in code pointing to this location.
+* Outgoing-Data References - The currently selected item is a data variable pointer to the reference which itself is either data or code.
+* Outgoing-Code References - The currently selected item is code pointing to the reference which itself is either data or code.
+
+#### Tree-based Layout
+The cross-references pane comes in two different layouts: tree-based (default and shown above) and table-based (this can be toggled through the context menu or the command palette). The tree-based layout provides the most condensed view, allowing users to quickly see (for instance) how many references are present to the current selection overall and by function. It also allows collapsing to quickly hide uninteresting results.
+
+#### Table-based Layout
+
+![xrefs >](img/cross-reference-table.png "xrefs table")
+
+The table-based layout provides field-based sorting and multi-select. Clicking the `Filter` text expands the filter pane, showing options for filtering the current results.
+
+#### Cross-Reference Filtering
+
+![xrefs <](img/cross-reference-filter.png "xrefs filter")
+
+The first of the two drop down boxes allows the selection of incoming, outgoing, or both incoming and outgoing (default). The second allows selection of code, data, or code and data (default). The text box allows regular expression matching of results. When a filter is selected the `Filter` display changes from `Filter (<total-count>)` to `Filter (<total-filtered>/<total-count>)`
+
+#### Cross-Reference Pinning
+
+By default Binary Ninja's cross-reference pane is dynamic, allowing quick navigation to relevent references.  Sometimes users would rather have the current references stick around so they can be used as a sort of worklist. This workflow is supported in three different ways. First and most obviously by clicking the `Pin` checkbox. This prevents the list of cross-references from being updated even after the current selection is changed. Alternatively, `SHIFT+X` (or selecting `Focus Pinned Cross References` in the context menu or command palette) pops up a `Pinned Cross References` pane. This pane has a static address range which can only be updated through the `Pinned Cross References` action. The third way would be to select (or multi-select in table view) a set of cross-references then right-click `Tag Selected Rows`. The tag pane can then be used to navigate those references. Tags allow for persistent lists to be saved to analysis database whereas the other options only last for the current session. 
+
+
+#### Cross-Reference Hotkeys
+
+* `x` - Focus the cross-references pane
+* `[SHIFT] x` Focus the pinned cross-references pane
+* `[OPTION/ALT] x` - Navigate to the next cross-reference
+* `[OPTION/ALT-SHIFT] x` - Navigate to the previous cross-reference
+
+The following are only available when the cross-references pane is in focus:
+
+* `[CMD/CTRL] f` - Open the filter dialog
+* `[ESC]` - Clear the search dialog
+* `[CMD/CTRL] a` - Select all cross-references
+* `[ARROW UP/DOWN]` - Select (but don't navigate) next/previous cross-reference
+* `[ENTER]` - Navigate to the selected refereence
+
 
 ### Linear View
 

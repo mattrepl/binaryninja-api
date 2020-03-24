@@ -750,6 +750,11 @@ class Function(object):
 				core.BNReleaseAdvancedFunctionAnalysisDataMultiple(self.handle, self._advanced_analysis_requests)
 			core.BNFreeFunction(self.handle)
 
+	def __lt__(self, value):
+		if not isinstance(value, Function):
+			raise TypeError("Can only compare to other Function objects")
+		return self.start < value.start
+
 	def __eq__(self, value):
 		if not isinstance(value, Function):
 			return False
@@ -792,6 +797,12 @@ class Function(object):
 			object.__setattr__(self, name, value)
 		except AttributeError:
 			raise AttributeError("attribute '%s' is read only" % name)
+
+	def __str__(self):
+		result = ""
+		for token in self.type_tokens:
+			result += token.text
+		return result
 
 	def __repr__(self):
 		arch = self.arch
@@ -1220,11 +1231,14 @@ class Function(object):
 
 	@property
 	def function_type(self):
-		"""Function type object"""
+		"""Function type object, can be set with either a string representing the function prototype (`str(function)` shows examples) or a :py:class:`Type` object"""
 		return types.Type(core.BNGetFunctionType(self.handle), platform = self.platform)
 
 	@function_type.setter
 	def function_type(self, value):
+		if isinstance(value, str):
+			(value, new_name) = self.view.parse_type_string(value)
+			self.name = str(new_name)
 		self.set_user_type(value)
 
 	@property
