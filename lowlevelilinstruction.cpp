@@ -30,7 +30,9 @@ using namespace BinaryNinjaCore;
 using namespace BinaryNinja;
 #endif
 
+#ifndef BINARYNINJACORE_LIBRARY
 using namespace std;
+#endif
 
 
 unordered_map<LowLevelILOperandUsage, LowLevelILOperandType>
@@ -1613,9 +1615,9 @@ RegisterValue LowLevelILInstructionBase::GetValue() const
 }
 
 
-PossibleValueSet LowLevelILInstructionBase::GetPossibleValues() const
+PossibleValueSet LowLevelILInstructionBase::GetPossibleValues(const set<BNDataFlowQueryOption>& options) const
 {
-	return function->GetPossibleExprValues(*(const LowLevelILInstruction*)this);
+	return function->GetPossibleExprValues(*(const LowLevelILInstruction*)this, options);
 }
 
 
@@ -3034,13 +3036,13 @@ ExprId LowLevelILFunction::FlagSSA(const SSAFlag& flag, const ILSourceLocation& 
 }
 
 
-ExprId LowLevelILFunction::FlagBit(size_t size, uint32_t flag, uint32_t bitIndex, const ILSourceLocation& loc)
+ExprId LowLevelILFunction::FlagBit(size_t size, uint32_t flag, size_t bitIndex, const ILSourceLocation& loc)
 {
 	return AddExprWithLocation(LLIL_FLAG_BIT, loc, size, 0, flag, bitIndex);
 }
 
 
-ExprId LowLevelILFunction::FlagBitSSA(size_t size, const SSAFlag& flag, uint32_t bitIndex,
+ExprId LowLevelILFunction::FlagBitSSA(size_t size, const SSAFlag& flag, size_t bitIndex,
 	const ILSourceLocation& loc)
 {
 	return AddExprWithLocation(LLIL_FLAG_BIT_SSA, loc, size, 0, flag.flag, flag.version, bitIndex);
@@ -3262,7 +3264,7 @@ ExprId LowLevelILFunction::Call(ExprId dest, const ILSourceLocation& loc)
 
 
 ExprId LowLevelILFunction::CallStackAdjust(ExprId dest, int64_t adjust,
-	const std::map<uint32_t, int32_t>& regStackAdjust, const ILSourceLocation& loc)
+	const map<uint32_t, int32_t>& regStackAdjust, const ILSourceLocation& loc)
 {
 	vector<size_t> list;
 	for (auto& i : regStackAdjust)
@@ -3443,7 +3445,7 @@ ExprId LowLevelILFunction::Breakpoint(const ILSourceLocation& loc)
 }
 
 
-ExprId LowLevelILFunction::Trap(uint32_t num, const ILSourceLocation& loc)
+ExprId LowLevelILFunction::Trap(int64_t num, const ILSourceLocation& loc)
 {
 	return AddExprWithLocation(LLIL_TRAP, loc, 0, 0, num);
 }

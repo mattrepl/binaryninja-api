@@ -88,6 +88,27 @@ class FileMetadata(object):
 				core.BNSetFilename(self.handle, str(filename))
 		self._nav = None
 
+	def __repr__(self):
+		return "<FileMetadata: %s>" % self.filename
+
+	def __del__(self):
+		if self.navigation is not None:
+			core.BNSetFileMetadataNavigationHandler(self.handle, None)
+		core.BNFreeFileMetadata(self.handle)
+
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash(ctypes.addressof(self.handle.contents))
+
 	@property
 	def nav(self):
 		"""
@@ -97,21 +118,6 @@ class FileMetadata(object):
 	@nav.setter
 	def nav(self, value):
 		self._nav = value
-
-	def __del__(self):
-		if self.navigation is not None:
-			core.BNSetFileMetadataNavigationHandler(self.handle, None)
-		core.BNFreeFileMetadata(self.handle)
-
-	def __eq__(self, value):
-		if not isinstance(value, FileMetadata):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
-
-	def __ne__(self, value):
-		if not isinstance(value, FileMetadata):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
 
 	@classmethod
 	def _unregister(cls, f):
@@ -274,7 +280,7 @@ class FileMetadata(object):
 
 	def undo(self):
 		"""
-		``undo`` undo the last commited action in the undo database.
+		``undo`` undo the last committed action in the undo database.
 
 		:rtype: None
 		:Example:
@@ -299,7 +305,7 @@ class FileMetadata(object):
 
 	def redo(self):
 		"""
-		``redo`` redo the last commited action in the undo database.
+		``redo`` redo the last committed action in the undo database.
 
 		:rtype: None
 		:Example:
@@ -358,6 +364,11 @@ class FileMetadata(object):
 				ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
 					lambda ctxt, cur, total: progress_func(cur, total)), clean)
 
+	def merge_user_analysis(self, path, progress_func = None):
+		return core.BNMergeUserAnalysis(self.handle, str(path), None,
+			ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
+			lambda ctxt, cur, total: progress_func(cur, total)))
+
 	def get_view_of_type(self, name):
 		view = core.BNGetFileViewOfType(self.handle, str(name))
 		if view is None:
@@ -368,9 +379,3 @@ class FileMetadata(object):
 			if view is None:
 				return None
 		return binaryninja.binaryview.BinaryView(file_metadata = self, handle = view)
-
-	def __setattr__(self, name, value):
-		try:
-			object.__setattr__(self, name, value)
-		except AttributeError:
-			raise AttributeError("attribute '%s' is read only" % name)

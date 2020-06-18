@@ -155,6 +155,7 @@ protected:
 	void bindActions();
 
 	void navigateToAddress(uint64_t addr);
+	void navigateToGotoLabel(uint64_t label);
 
 	void setGraphInternal(FlowGraphRef graph, FlowGraphHistoryEntry* entry, bool useAddr, uint64_t addr, bool notify,
 		bool recenterWithPreviousGraph);
@@ -174,6 +175,8 @@ protected:
 	void selectAll();
 	void selectNone();
 	void navigateToHighlightedToken();
+
+	uint64_t getTokenAddress();
 
 public:
 	FlowGraphWidget(QWidget* parent, BinaryViewRef view, FlowGraphRef graph = FlowGraphRef());
@@ -196,8 +199,8 @@ public:
 
 	virtual BinaryViewRef getData() override { return m_data; }
 	virtual uint64_t getCurrentOffset() override;
-	virtual void getSelectionOffsets(uint64_t& begin, uint64_t& end) override;
-	virtual void getSelectionForInfo(uint64_t& begin, uint64_t& end) override;
+	virtual BNAddressRange getSelectionOffsets() override;
+	virtual BNAddressRange getSelectionForInfo() override;
 	virtual bool navigate(uint64_t pos) override;
 	virtual bool navigateToFunction(FunctionRef func, uint64_t pos) override;
 	bool navigateWithHistoryEntry(uint64_t addr, FlowGraphHistoryEntry* entry);

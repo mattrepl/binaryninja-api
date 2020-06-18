@@ -28,9 +28,27 @@ from binaryninja import types
 # 2-3 compatibility
 from binaryninja import range
 from binaryninja import with_metaclass
+import os
 
 
 class _PlatformMetaClass(type):
+
+	def __iter__(self):
+		binaryninja._init_plugins()
+		count = ctypes.c_ulonglong()
+		platforms = core.BNGetPlatformList(count)
+		try:
+			for i in range(0, count.value):
+				yield Platform(handle = core.BNNewPlatformReference(platforms[i]))
+		finally:
+			core.BNFreePlatformList(platforms, count.value)
+
+	def __getitem__(cls, value):
+		binaryninja._init_plugins()
+		platform = core.BNGetPlatformByName(str(value))
+		if platform is None:
+			raise KeyError("'%s' is not a valid platform" % str(value))
+		return Platform(handle = platform)
 
 	@property
 	def list(self):
@@ -53,29 +71,6 @@ class _PlatformMetaClass(type):
 			result.append(str(platforms[i]))
 		core.BNFreePlatformOSList(platforms, count.value)
 		return result
-
-	def __iter__(self):
-		binaryninja._init_plugins()
-		count = ctypes.c_ulonglong()
-		platforms = core.BNGetPlatformList(count)
-		try:
-			for i in range(0, count.value):
-				yield Platform(handle = core.BNNewPlatformReference(platforms[i]))
-		finally:
-			core.BNFreePlatformList(platforms, count.value)
-
-	def __setattr__(self, name, value):
-		try:
-			type.__setattr__(self, name, value)
-		except AttributeError:
-			raise AttributeError("attribute '%s' is read only" % name)
-
-	def __getitem__(cls, value):
-		binaryninja._init_plugins()
-		platform = core.BNGetPlatformByName(str(value))
-		if platform is None:
-			raise KeyError("'%s' is not a valid platform" % str(value))
-		return Platform(handle = platform)
 
 	def get_list(cls, os = None, arch = None):
 		binaryninja._init_plugins()
@@ -116,15 +111,21 @@ class Platform(with_metaclass(_PlatformMetaClass, object)):
 		if self.handle is not None:
 			core.BNFreePlatform(self.handle)
 
-	def __eq__(self, value):
-		if not isinstance(value, Platform):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
+	def __repr__(self):
+		return "<platform: %s>" % self.name
 
-	def __ne__(self, value):
-		if not isinstance(value, Platform):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+	def __str__(self):
+		return self.name
+
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
 
 	@property
 	def list(self):
@@ -305,18 +306,6 @@ class Platform(with_metaclass(_PlatformMetaClass, object)):
 		core.BNFreeTypeLibraryList(libs, count.value)
 		return result
 
-	def __setattr__(self, name, value):
-		try:
-			object.__setattr__(self, name, value)
-		except AttributeError:
-			raise AttributeError("attribute '%s' is read only" % name)
-
-	def __repr__(self):
-		return "<platform: %s>" % self.name
-
-	def __str__(self):
-		return self.name
-
 	def register(self, os):
 		"""
 		``register`` registers the platform for given OS name.
@@ -413,6 +402,8 @@ class Platform(with_metaclass(_PlatformMetaClass, object)):
 
 		if filename is None:
 			filename = "input"
+		if not (isinstance(source, str) or isinstance(source, unicode)):
+			raise AttributeError("Source must be a string")
 		dir_buf = (ctypes.c_char_p * len(include_dirs))()
 		for i in range(0, len(include_dirs)):
 			dir_buf[i] = include_dirs[i].encode('charmap')
@@ -460,6 +451,8 @@ class Platform(with_metaclass(_PlatformMetaClass, object)):
 			{'bar': <type: int32_t(int32_t x)>}}, '')
 			>>>
 		"""
+		if not (isinstance(filename, str) and os.path.isfile(filename) and os.access(filename, os.R_OK)):
+			 raise AttributeError("File {} doesn't exist or isn't readable".format(filename))
 		dir_buf = (ctypes.c_char_p * len(include_dirs))()
 		for i in range(0, len(include_dirs)):
 			dir_buf[i] = include_dirs[i].encode('charmap')

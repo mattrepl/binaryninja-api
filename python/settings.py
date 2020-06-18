@@ -80,15 +80,15 @@ class Settings(object):
 		if self.handle is not Settings.handle and self.handle is not None:
 			core.BNFreeSettings(self.handle)
 
-	def __eq__(self, value):
-		if not isinstance(value, Settings):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
 
-	def __ne__(self, value):
-		if not isinstance(value, Settings):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
 
 	def __hash__(self):
 		return hash((self.instance_id, ctypes.addressof(self.handle.contents)))
@@ -208,10 +208,10 @@ class Settings(object):
 			view = view.handle
 		return core.BNSettingsReset(self.handle, key, view, scope)
 
-	def reset_all(self, view = None, scope = SettingsScope.SettingsAutoScope):
+	def reset_all(self, view = None, scope = SettingsScope.SettingsAutoScope, schema_only = True):
 		if view is not None:
 			view = view.handle
-		return core.BNSettingsResetAll(self.handle, view, scope)
+		return core.BNSettingsResetAll(self.handle, view, scope, schema_only)
 
 	def get_bool(self, key, view = None):
 		if view is not None:

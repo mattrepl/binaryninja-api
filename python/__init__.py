@@ -45,6 +45,7 @@ from binaryninja.function import *
 from binaryninja.log import *
 from binaryninja.lowlevelil import *
 from binaryninja.mediumlevelil import *
+from binaryninja.highlevelil import *
 from binaryninja.types import *
 from binaryninja.typelibrary import *
 from binaryninja.functionrecognizer import *
@@ -56,7 +57,6 @@ from binaryninja.demangle import *
 from binaryninja.mainthread import *
 from binaryninja.interaction import *
 from binaryninja.lineardisassembly import *
-from binaryninja.undoaction import *
 from binaryninja.highlight import *
 from binaryninja.scriptingprovider import *
 from binaryninja.downloadprovider import *
@@ -114,7 +114,7 @@ class PluginManagerLoadPluginCallback(object):
 				raise ValueError("Plugin API name is not " + _plugin_api_name)
 
 			if not force and core.core_platform not in plugin.install_platforms:
-				raise ValueError("Current platform {} ins't in list of valid platforms for this plugin {}".format(
+				raise ValueError("Current platform {} isn't in list of valid platforms for this plugin {}".format(
 					core.core_platform, plugin.install_platforms))
 			if not plugin.installed:
 				plugin.installed = True
@@ -255,3 +255,17 @@ def get_memory_usage_info():
 	core.BNFreeMemoryUsageInfo(info, count.value)
 	return result
 
+
+def open_view(*args, **kwargs):
+	"""
+	Open a BinaryView object
+
+	:Example:
+		>>> from binaryninja import *
+		>>> with open_view("/bin/ls") as bv:
+		...     print(len(bv.functions))
+		...
+		128
+
+	"""
+	return BinaryViewType.get_view_of_file_with_options(*args, **kwargs)

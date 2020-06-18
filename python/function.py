@@ -49,6 +49,19 @@ class LookupTableEntry(object):
 	def __repr__(self):
 		return "[%s] -> %#x" % (', '.join(["%#x" % i for i in self.from_values]), self.to_value)
 
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return (self._from_values, self._to_value) == (other._from_values, other._to_value)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash((self._from_values, self._to_value))
+
 	@property
 	def from_values(self):
 		""" """
@@ -113,26 +126,30 @@ class RegisterValue(object):
 		return "<undetermined>"
 
 	def __hash__(self):
-			if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue]:
-				return hash(self._value)
-			elif self.type == RegisterValueType.EntryValue:
-				return hash(self._reg)
-			elif self._type == RegisterValueType.StackFrameOffset:
-				return hash(self._offset)
+		if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue]:
+			return hash(self._value)
+		elif self.type == RegisterValueType.EntryValue:
+			return hash(self._reg)
+		elif self._type == RegisterValueType.StackFrameOffset:
+			return hash(self._offset)
 
 	def __eq__(self, other):
-			if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and isinstance(other, numbers.Integral):
-				return self._value == other
-			elif self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and hasattr(other, 'type') and other.type == self._type:
-				return self._value == other.value
-			elif self._type == RegisterValueType.EntryValue and hasattr(other, "type") and other.type == self._type:
-				return self._reg == other.reg
-			elif self._type == RegisterValueType.StackFrameOffset and hasattr(other, 'type') and other.type == self._type:
-				return self._offset == other.offset
-			elif self._type == RegisterValueType.StackFrameOffset and isinstance(other, numbers.Integral):
-				return self._offset == other
-			else:
-				raise TypeError("'%s' is not valid for comparison to '%s'" % (other, self))
+		if self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and isinstance(other, numbers.Integral):
+			return self._value == other
+		elif self._type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue, RegisterValueType.ImportedAddressValue, RegisterValueType.ReturnAddressValue] and hasattr(other, 'type') and other.type == self._type:
+			return self._value == other.value
+		elif self._type == RegisterValueType.EntryValue and hasattr(other, "type") and other.type == self._type:
+			return self._reg == other.reg
+		elif self._type == RegisterValueType.StackFrameOffset and hasattr(other, 'type') and other.type == self._type:
+			return self._offset == other.offset
+		elif self._type == RegisterValueType.StackFrameOffset and isinstance(other, numbers.Integral):
+			return self._offset == other
+		return NotImplemented
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
 
 	def _to_api_object(self):
 		result = core.BNRegisterValue()
@@ -246,6 +263,8 @@ class ValueRange(object):
 			return "<range: %#x to %#x>" % (self.start, self.end)
 		return "<range: %#x to %#x, step %#x>" % (self.start, self.end, self.step)
 
+
+
 	@property
 	def start(self):
 		""" """
@@ -278,10 +297,16 @@ class ValueRange(object):
 
 
 class PossibleValueSet(object):
-	def __init__(self, arch, value):
+	def __init__(self, arch = None, value = None):
+		if value is None:
+			self._type = RegisterValueType.UndeterminedValue
+			return
 		self._type = RegisterValueType(value.state)
 		if value.state == RegisterValueType.EntryValue:
-			self._reg = arch.get_reg_name(value.value)
+			if arch is None:
+				self._reg = value.value
+			else:
+				self._reg = arch.get_reg_name(value.value)
 		elif value.state == RegisterValueType.ConstantValue:
 			self._value = value.value
 		elif value.state == RegisterValueType.ConstantPointerValue:
@@ -344,6 +369,19 @@ class PossibleValueSet(object):
 		if self._type == RegisterValueType.ReturnAddressValue:
 			return "<return address>"
 		return "<undetermined>"
+
+	def __eq__(self, other):
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and isinstance(other, numbers.Integral):
+			return self.value == other
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and hasattr(other, 'type') and other.type == self.type:
+			return self.value == other.value
+		else:
+			return self == other
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
 
 	@property
 	def type(self):
@@ -425,14 +463,6 @@ class PossibleValueSet(object):
 		""" """
 		self._values = value
 
-	def __eq__(self, other):
-		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and isinstance(other, numbers.Integral):
-			return self.value == other
-		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and hasattr(other, 'type') and other.type == self.type:
-			return self.value == other.value
-		else:
-			return self == other
-
 
 class StackVariableReference(object):
 	def __init__(self, src_operand, t, name, var, ref_ofs, size):
@@ -453,6 +483,20 @@ class StackVariableReference(object):
 		if self._referenced_offset != self._var.storage:
 			return "<operand %d ref to %s%+#x>" % (self._source_operand, self._name, self._var.storage)
 		return "<operand %d ref to %s>" % (self._source_operand, self._name)
+
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return (self._source_operand, self._type, self._name, self._var, self._referenced_offset, self._size) == \
+			(other._source_operand, other._type, other._name, other._var, other._referenced_offset, other._size)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash((self._source_operand, self._type, self._name, self._var, self._referenced_offset, self._size))
 
 	@property
 	def source_operand(self):
@@ -535,6 +579,27 @@ class Variable(object):
 		self._name = name
 		self._type = var_type
 
+	def __repr__(self):
+		if self._type is None:
+			return "<var %s>" % self.name
+		return "<var %s %s%s>" % (self._type.get_string_before_name(), self.name, self._type.get_string_after_name())
+
+	def __str__(self):
+		return self.name
+
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return (self.identifier, self.function) == (other.identifier, other.function)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash((self.identifier, self.function))
+
 	@property
 	def function(self):
 		"""Function where the variable is defined"""
@@ -602,23 +667,6 @@ class Variable(object):
 	def from_identifier(self, func, identifier, name = None, var_type = None):
 		var = core.BNFromVariableIdentifier(identifier)
 		return Variable(func, VariableSourceType(var.type), var.index, var.storage, name, var_type)
-
-	def __repr__(self):
-		if self._type is None:
-			return "<var %s>" % self.name
-		return "<var %s %s%s>" % (self._type.get_string_before_name(), self.name, self._type.get_string_after_name())
-
-	def __str__(self):
-		return self.name
-
-	def __eq__(self, other):
-		if not isinstance(other, Variable):
-			return False
-		return (self.identifier, self.function) == (other.identifier, other.function)
-
-	def __hash__(self):
-		return hash((self.identifier, self.function))
-
 
 class ConstantReference(object):
 	def __init__(self, val, size, ptr, intermediate):
@@ -692,15 +740,15 @@ class ParameterVariables(object):
 	def __repr__(self):
 		return repr(self._vars)
 
+	def __len__(self):
+		return len(self._vars)
+
 	def __iter__(self):
 		for var in self._vars:
 			yield var
 
 	def __getitem__(self, idx):
 		return self._vars[idx]
-
-	def __len__(self):
-		return len(self._vars)
 
 	def with_confidence(self, confidence):
 		return ParameterVariables(list(self._vars), confidence = confidence)
@@ -750,20 +798,42 @@ class Function(object):
 				core.BNReleaseAdvancedFunctionAnalysisDataMultiple(self.handle, self._advanced_analysis_requests)
 			core.BNFreeFunction(self.handle)
 
-	def __lt__(self, value):
-		if not isinstance(value, Function):
-			raise TypeError("Can only compare to other Function objects")
-		return self.start < value.start
+	def __repr__(self):
+		arch = self.arch
+		if arch:
+			return "<func: %s@%#x>" % (arch.name, self.start)
+		else:
+			return "<func: %#x>" % self.start
 
-	def __eq__(self, value):
-		if not isinstance(value, Function):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
 
-	def __ne__(self, value):
-		if not isinstance(value, Function):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __lt__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.start < other.start
+
+	def __gt__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.start > other.start
+
+	def __le__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.start <= other.start
+
+	def __ge__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.start >= other.start
 
 	def __hash__(self):
 		return hash((self.start, self.arch.name, self.platform.name))
@@ -792,24 +862,11 @@ class Function(object):
 		finally:
 			core.BNFreeBasicBlockList(blocks, count.value)
 
-	def __setattr__(self, name, value):
-		try:
-			object.__setattr__(self, name, value)
-		except AttributeError:
-			raise AttributeError("attribute '%s' is read only" % name)
-
 	def __str__(self):
 		result = ""
 		for token in self.type_tokens:
 			result += token.text
 		return result
-
-	def __repr__(self):
-		arch = self.arch
-		if arch:
-			return "<func: %s@%#x>" % (arch.name, self.start)
-		else:
-			return "<func: %#x>" % self.start
 
 	@classmethod
 	def _unregister(cls, func):
@@ -1215,9 +1272,25 @@ class Function(object):
 		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, core.BNGetFunctionLowLevelIL(self.handle), self)
 
 	@property
+	def llil_if_available(self):
+		"""returns LowLevelILFunction used to represent Function low level IL, or None if not loaded (read-only)"""
+		result = core.BNGetFunctionLowLevelILIfAvailable(self.handle)
+		if not result:
+			return None
+		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, result, self)
+
+	@property
 	def lifted_il(self):
 		"""returns LowLevelILFunction used to represent lifted IL (read-only)"""
 		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, core.BNGetFunctionLiftedIL(self.handle), self)
+
+	@property
+	def lifted_il_if_available(self):
+		"""returns LowLevelILFunction used to represent lifted IL, or None if not loaded (read-only)"""
+		result = core.BNGetFunctionLiftedILIfAvailable(self.handle)
+		if not result:
+			return None
+		return binaryninja.lowlevelil.LowLevelILFunction(self.arch, result, self)
 
 	@property
 	def medium_level_il(self):
@@ -1228,6 +1301,32 @@ class Function(object):
 	def mlil(self):
 		"""Function medium level IL (read-only)"""
 		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, core.BNGetFunctionMediumLevelIL(self.handle), self)
+
+	@property
+	def mlil_if_available(self):
+		"""Function medium level IL, or None if not loaded (read-only)"""
+		result = core.BNGetFunctionMediumLevelILIfAvailable(self.handle)
+		if not result:
+			return None
+		return binaryninja.mediumlevelil.MediumLevelILFunction(self.arch, result, self)
+
+	@property
+	def high_level_il(self):
+		"""Deprecated property provided for compatibility. Use hlil instead."""
+		return binaryninja.highlevelil.HighLevelILFunction(self.arch, core.BNGetFunctionHighLevelIL(self.handle), self)
+
+	@property
+	def hlil(self):
+		"""Function high level IL (read-only)"""
+		return binaryninja.highlevelil.HighLevelILFunction(self.arch, core.BNGetFunctionHighLevelIL(self.handle), self)
+
+	@property
+	def hlil_if_available(self):
+		"""Function high level IL, or None if not loaded (read-only)"""
+		result = core.BNGetFunctionHighLevelILIfAvailable(self.handle)
+		if not result:
+			return None
+		return binaryninja.highlevelil.HighLevelILFunction(self.arch, result, self)
 
 	@property
 	def function_type(self):
@@ -1540,17 +1639,17 @@ class Function(object):
 		"""Whether automatic analysis was skipped for this function"""
 		return core.BNIsFunctionAnalysisSkipped(self.handle)
 
-	@property
-	def analysis_skip_reason(self):
-		"""Function analysis skip reason"""
-		return AnalysisSkipReason(core.BNGetAnalysisSkipReason(self.handle))
-
 	@analysis_skipped.setter
 	def analysis_skipped(self, skip):
 		if skip:
 			core.BNSetFunctionAnalysisSkipOverride(self.handle, FunctionAnalysisSkipOverride.AlwaysSkipFunctionAnalysis)
 		else:
 			core.BNSetFunctionAnalysisSkipOverride(self.handle, FunctionAnalysisSkipOverride.NeverSkipFunctionAnalysis)
+
+	@property
+	def analysis_skip_reason(self):
+		"""Function analysis skip reason"""
+		return AnalysisSkipReason(core.BNGetAnalysisSkipReason(self.handle))
 
 	@property
 	def analysis_skip_override(self):
@@ -1617,7 +1716,7 @@ class Function(object):
 
 	def remove_user_code_ref(self, from_addr, to_addr, from_arch=None):
 		"""
-		``remove_user_code_ref`` reomves a user-defined cross-reference.
+		``remove_user_code_ref`` removes a user-defined cross-reference.
 		If the given address is not contained within this function, or if there is no
 		such user-defined cross-reference, no action is performed.
 
@@ -1861,8 +1960,8 @@ class Function(object):
 			settings_obj = None
 		return binaryninja.flowgraph.CoreFlowGraph(core.BNCreateFunctionGraph(self.handle, graph_type, settings_obj))
 
-	def apply_imported_types(self, sym):
-		core.BNApplyImportedTypes(self.handle, sym.handle)
+	def apply_imported_types(self, sym, type=None):
+		core.BNApplyImportedTypes(self.handle, sym.handle, None if type is None else type.handle)
 
 	def apply_auto_discovered_type(self, func_type):
 		core.BNApplyAutoDiscoveredFunctionType(self.handle, func_type.handle)
@@ -2782,7 +2881,7 @@ class InstructionTextToken(object):
 	"""
 	``class InstructionTextToken`` is used to tell the core about the various components in the disassembly views.
 
-	The below table is provided for ducmentation purposes but the complete list of TokenTypes is available at: :class:`!enums.InstructionTextTokenType`. Note that types marked as `Not emitted by architectures` are not intended to be used by Architectures during lifting. Rather, they are addded by the core during analysis or display. UI plugins, however, may make use of them as appropriate.
+	The below table is provided for ducmentation purposes but the complete list of TokenTypes is available at: :class:`!enums.InstructionTextTokenType`. Note that types marked as `Not emitted by architectures` are not intended to be used by Architectures during lifting. Rather, they are added by the core during analysis or display. UI plugins, however, may make use of them as appropriate.
 	
 	Uses of tokens include plugins that parse the output of an architecture (though parsing IL is recommended), or additionally, applying color schemes appropriately.
 
@@ -2814,7 +2913,7 @@ class InstructionTextToken(object):
 		NameSpaceSeparatorToken    **Not emitted by architectures**
 		NameSpaceToken             **Not emitted by architectures**
 		OpcodeToken                **Not emitted by architectures**
-		OperandSeparatorToken      The comma or delimeter that separates tokens
+		OperandSeparatorToken      The comma or delimiter that separates tokens
 		PossibleAddressToken       Integers that are likely addresses
 		RegisterToken              Registers
 		StringToken                **Not emitted by architectures**
@@ -2989,6 +3088,8 @@ class DisassemblyTextRenderer(object):
 				self.handle = core.BNCreateLowLevelILDisassemblyTextRenderer(func.handle, settings_obj)
 			elif isinstance(func, binaryninja.mediumlevelil.MediumLevelILFunction):
 				self.handle = core.BNCreateMediumLevelILDisassemblyTextRenderer(func.handle, settings_obj)
+			elif isinstance(func, binaryninja.highlevelil.HighLevelILFunction):
+				self.handle = core.BNCreateHighLevelILDisassemblyTextRenderer(func.handle, settings_obj)
 			else:
 				raise TypeError("invalid function object")
 		else:
@@ -3009,6 +3110,9 @@ class DisassemblyTextRenderer(object):
 		mlil = core.BNGetDisassemblyTextRendererMediumLevelILFunction(self.handle)
 		if mlil:
 			return binaryninja.mediumlevelil.MediumLevelILFunction(handle = mlil)
+		hlil = core.BNGetDisassemblyTextRendererHighLevelILFunction(self.handle)
+		if hlil:
+			return binaryninja.highlevelil.HighLevelILFunction(handle = hlil)
 		return None
 
 	@property
@@ -3100,7 +3204,7 @@ class DisassemblyTextRenderer(object):
 		core.BNFreeDisassemblyTextLines(lines, count.value)
 		return (result, length.value)
 
-	def post_process_lines(self, addr, length, in_lines):
+	def post_process_lines(self, addr, length, in_lines, indent_spaces=""):
 		if isinstance(in_lines, str):
 			in_lines = in_lines.split('\n')
 		line_buf = (core.BNDisassemblyTextLine * len(in_lines))()
@@ -3131,7 +3235,7 @@ class DisassemblyTextRenderer(object):
 			line_buf[i].tokens = InstructionTextToken.get_instruction_lines(line.tokens)
 		count = ctypes.c_ulonglong()
 		lines = ctypes.POINTER(core.BNDisassemblyTextLine)()
-		lines = core.BNPostProcessDisassemblyTextRendererLines(self.handle, addr, length, line_buf, len(in_lines), count)
+		lines = core.BNPostProcessDisassemblyTextRendererLines(self.handle, addr, length, line_buf, len(in_lines), count, indent_spaces)
 		il_function = self.il_function
 		result = []
 		for i in range(0, count.value):
@@ -3197,7 +3301,7 @@ class DisassemblyTextRenderer(object):
 		tokens += result
 		core.BNFreeInstructionText(new_tokens, count.value)
 
-	def wrap_comment(self, lines, cur_line, comment, has_auto_annotations, leading_spaces = "  "):
+	def wrap_comment(self, lines, cur_line, comment, has_auto_annotations, leading_spaces = "  ", indent_spaces = ""):
 		cur_line_obj = core.BNDisassemblyTextLine()
 		cur_line_obj.addr = cur_line.address
 		if cur_line.il_instruction is None:
@@ -3209,7 +3313,7 @@ class DisassemblyTextRenderer(object):
 		cur_line_obj.count = len(cur_line.tokens)
 		count = ctypes.c_ulonglong()
 		new_lines = core.BNDisassemblyTextRendererWrapComment(self.handle, cur_line_obj, count, comment,
-			has_auto_annotations, leading_spaces)
+			has_auto_annotations, leading_spaces, indent_spaces)
 		il_function = self.il_function
 		for i in range(0, count.value):
 			addr = new_lines[i].addr

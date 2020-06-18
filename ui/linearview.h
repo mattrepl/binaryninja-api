@@ -13,34 +13,61 @@
 #define LINEAR_VIEW_UPDATE_CHECK_INTERVAL 200
 #define MAX_STRING_TYPE_LENGTH 1048576
 
-struct BINARYNINJAUIAPI LinearViewCursorPosition: public BinaryNinja::LinearDisassemblyPosition
+struct BINARYNINJAUIAPI LinearViewLine: public BinaryNinja::LinearDisassemblyLine
 {
-	uint64_t lineAddress;
-	size_t lineIndexForAddress;
+	BinaryNinja::Ref<BinaryNinja::LinearViewCursor> cursor;
+	size_t lineIndex;
+};
+
+struct BINARYNINJAUIAPI LinearViewCursorPosition
+{
+	FunctionRef function;
+	BasicBlockRef block;
+	uint64_t address;
+	BinaryNinja::Ref<BinaryNinja::LinearViewCursor> cursor;
+	size_t lineIndex;
 	size_t tokenIndex;
 
 	LinearViewCursorPosition();
 	LinearViewCursorPosition(const LinearViewCursorPosition& pos);
-	LinearViewCursorPosition(const BinaryNinja::LinearDisassemblyPosition& pos);
+	LinearViewCursorPosition(const LinearViewLine& line);
 	LinearViewCursorPosition& operator=(const LinearViewCursorPosition& pos);
+
+	bool operator==(const LinearViewCursorPosition& other) const;
+	bool operator!=(const LinearViewCursorPosition& other) const;
+	bool operator<(const LinearViewCursorPosition& other) const;
+	bool operator<=(const LinearViewCursorPosition& other) const;
+	bool operator>=(const LinearViewCursorPosition& other) const;
+	bool operator>(const LinearViewCursorPosition& other) const;
+
+	LinearViewCursorPosition AsLine() const;
 };
 
 class BINARYNINJAUIAPI LinearViewHistoryEntry: public HistoryEntry
 {
-	BinaryNinja::LinearDisassemblyPosition m_topPosition;
-	LinearViewCursorPosition m_cursorPosition;
-	size_t m_topLineOffset;
+	std::vector<BinaryNinja::LinearViewObjectIdentifier> m_topPath;
+	size_t m_topLineIndex;
+	uint64_t m_topAddr;
+	std::vector<BinaryNinja::LinearViewObjectIdentifier> m_cursorPath;
+	size_t m_cursorLineIndex;
+	uint64_t m_cursorAddr;
 	HighlightTokenState m_highlight;
 
 public:
-	const BinaryNinja::LinearDisassemblyPosition& getTopPosition() const { return m_topPosition; }
-	const LinearViewCursorPosition& getCursorPosition() const { return m_cursorPosition; }
-	size_t getTopLineOffset() const { return m_topLineOffset; }
+	const std::vector<BinaryNinja::LinearViewObjectIdentifier>& getTopPath() const { return m_topPath; }
+	size_t getTopLineIndex() const { return m_topLineIndex; }
+	uint64_t getTopAddress() const { return m_topAddr; }
+	const std::vector<BinaryNinja::LinearViewObjectIdentifier>& getCursorPath() const { return m_cursorPath; }
+	size_t getCursorLineIndex() const { return m_cursorLineIndex; }
+	uint64_t getCursorAddress() const { return m_cursorAddr; }
 	const HighlightTokenState& getHighlightTokenState() const { return m_highlight; }
 
-	void setTopPosition(const BinaryNinja::LinearDisassemblyPosition& pos) { m_topPosition = pos; }
-	void setCursorPosition(const LinearViewCursorPosition& pos) { m_cursorPosition = pos; }
-	void setTopLineOffset(size_t offset) { m_topLineOffset = offset; }
+	void setTopPath(const std::vector<BinaryNinja::LinearViewObjectIdentifier>& path) { m_topPath = path; }
+	void setTopLineIndex(size_t offset) { m_topLineIndex = offset; }
+	void setTopAddress(uint64_t addr) { m_topAddr = addr; }
+	void setCursorPath(const std::vector<BinaryNinja::LinearViewObjectIdentifier>& path) { m_cursorPath = path; }
+	void setCursorLineIndex(size_t offset) { m_cursorLineIndex = offset; }
+	void setCursorAddress(uint64_t addr) { m_cursorAddr = addr; }
 	void setHighlightTokenState(const HighlightTokenState& state) { m_highlight = state; }
 };
 
@@ -73,7 +100,6 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 
 	BinaryViewRef m_data;
 	ViewFrame* m_view;
-	std::vector<BNAddressRange> m_ranges;
 	uint64_t m_allocatedLength;
 
 	RenderContext m_render;
@@ -83,7 +109,7 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	bool m_updatingScrollBar;
 
 	bool m_updatesRequired;
-	bool m_updateBounds, m_updateBlockRef;
+	bool m_updateBounds;
 
 	LinearViewCursorPosition m_cursorPosition, m_selectionStartPos;
 	bool m_tokenSelection = false;
@@ -91,10 +117,12 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	uint64_t m_navByRefTarget;
 	bool m_navByRef = false;
 
-	DisassemblySettingsRef m_settings;
+	SettingsRef m_settings;
+	DisassemblySettingsRef m_options;
+	BNFunctionGraphType m_type;
 
-	BinaryNinja::LinearDisassemblyPosition m_topPosition, m_bottomPosition;
-	std::vector<BinaryNinja::LinearDisassemblyLine> m_lines;
+	BinaryNinja::Ref<BinaryNinja::LinearViewCursor> m_topPosition, m_bottomPosition;
+	std::vector<LinearViewLine> m_lines;
 	size_t m_topLine;
 
 	QTimer* m_updateTimer;
@@ -102,18 +130,19 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	ContextMenuManager m_contextMenuManager;
 	QPointer<CommentDialog> m_commentDialog;
 
-	void adjustSize(int width, int height);
+	std::map<FunctionRef, BinaryNinja::AdvancedFunctionAnalysisDataRequestor> m_analysisRequestors;
 
-	uint64_t getContiguousOffsetForAddress(uint64_t addr);
-	uint64_t getAddressForContiguousOffset(uint64_t offset);
+	std::string m_navigationMode = "";
 
 	void setTopToAddress(uint64_t addr);
+	void setTopToOrderingIndex(uint64_t idx);
 	void refreshLines(size_t lineOffset = 0, bool refreshUIContext = true);
 	bool cachePreviousLines();
-	bool cacheNextLines(size_t& topLineAdjustment);
+	bool cacheNextLines();
 	void updateCache();
 	void refreshAtCurrentLocation();
 	bool navigateToAddress(uint64_t addr, bool center, bool updateHighlight, bool navByRef = false);
+	bool navigateToGotoLabel(uint64_t label);
 
 	void scrollLines(int count);
 
@@ -138,7 +167,24 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	TypeRef getPointerTypeAndName(ArchitectureRef arch, uint64_t addr, std::string& name);
 	std::string getVariableName(uint64_t addr);
 
+	BinaryNinja::Ref<BinaryNinja::LinearViewObject> createLinearViewObject();
+	LinearViewCursorPosition getPositionForCursor(BinaryNinja::LinearViewCursor* cursor);
+	bool updateCursor(LinearViewCursorPosition& cursorToUpdate, BinaryNinja::LinearViewCursor* matched, bool fullMatch);
+	bool updateCursor(LinearViewCursorPosition& cursorToUpdate, BinaryNinja::LinearViewCursor* newCursor);
+	bool updateCursor(LinearViewCursorPosition& cursorToUpdate,
+		const std::vector<BinaryNinja::LinearViewObjectIdentifier>& path,
+		BinaryNinja::LinearViewCursor* newCursor);
+	uint64_t getOrderingIndexForLine(const LinearViewLine& line);
+
+	void updateAnalysisRequestorsForCache();
+
+	ArchitectureRef getArchitecture(const LinearViewLine& line);
+	uint64_t getTokenAddress();
+
+	BNAnalysisWarningActionType getAnalysisWarningActionAtPos(const LinearViewLine& line, int x);
+
 private Q_SLOTS:
+	void adjustSize(int width, int height);
 	void viewInHexEditor();
 	void viewInGraph();
 	void viewInTypesView(std::string typeName = "");
@@ -201,6 +247,12 @@ private Q_SLOTS:
 	void scrollBarAction(int action);
 	void updateTimerEvent();
 
+	void setStackAdjustment();
+	void setCallTypeAdjustment();
+
+Q_SIGNALS:
+	void notifyResizeEvent(int width, int height);
+
 public:
 	explicit LinearView(BinaryViewRef data, ViewFrame* view);
 	virtual ~LinearView();
@@ -211,12 +263,16 @@ public:
 	virtual BinaryViewRef getData() override { return m_data; }
 	void getCurrentOffsetByType(TypeRef resType, uint64_t baseAddr, uint64_t& begin, uint64_t& end, bool singleLine);
 	virtual uint64_t getCurrentOffset() override;
-	virtual void getSelectionOffsets(uint64_t& begin, uint64_t& end) override;
-	virtual void getSelectionForInfo(uint64_t& begin, uint64_t& end) override;
+	virtual BNAddressRange getSelectionOffsets() override;
+	virtual BNAddressRange getSelectionForInfo() override;
 	virtual FunctionRef getCurrentFunction() override;
 	virtual BasicBlockRef getCurrentBasicBlock() override;
 	virtual ArchitectureRef getCurrentArchitecture() override;
 	virtual bool navigate(uint64_t pos) override;
+
+	virtual std::string getNavigationMode() override;
+	virtual void setNavigationMode(std::string mode) override;
+	virtual std::vector<std::string> getNavigationModes() override;
 
 	virtual HistoryEntry* getHistoryEntry() override;
 	virtual void navigateToHistoryEntry(HistoryEntry* entry) override;
@@ -247,6 +303,7 @@ public:
 	virtual HighlightTokenState getHighlightTokenState() override { return m_highlight; }
 
 	void toggleOption(BNDisassemblyOption option);
+	void setViewType(BNFunctionGraphType type);
 
 	virtual bool goToReference(FunctionRef func, uint64_t source, uint64_t target) override;
 	QFont getFont() override { return m_render.getFont(); }

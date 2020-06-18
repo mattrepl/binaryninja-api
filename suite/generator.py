@@ -7,6 +7,14 @@ from optparse import OptionParser
 import testcommon
 import time
 
+if sys.version_info.major == 3:
+    # The differences between the behavior of str() on Python 2 and Python 3 make it very difficult to make
+    # test results created on Python 3 work when testing on Python 2. Test results generated with Python 2
+    # will work when testing on both Python 2 and Python 3.
+    # FIXME: When Python 2 is dropped fully, use Python 3 to generate the tests.
+    print("Generate unit tests on Python 2. Python 3 generated test results are NOT COMPATIBLE with Python 2.")
+    sys.exit(1)
+
 unit_test_template = """#!/usr/bin/env python
 # This is an auto generated unit test file do not edit directly
 import os
@@ -21,6 +29,7 @@ api_suite_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), {4})
 sys.path.append(api_suite_path)
 import testcommon
 import api_test
+import rebasing_test
 
 global verbose
 verbose = False
@@ -83,7 +92,7 @@ class TestBinaryNinjaAPI(unittest.TestCase):
         pickle_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "oracle.pkl")
         try:
             # Python 2 does not have the encodings option
-            self.oracle_test_data = pickle.load(open(pickle_path, "rb"), encoding='charmap')
+            self.oracle_test_data = pickle.load(open(pickle_path, "rb"), encoding='utf8')
         except TypeError:
             self.oracle_test_data = pickle.load(open(pickle_path, "rb"))
         self.verifybuilder = testcommon.VerifyBuilder("{3}")
@@ -98,7 +107,7 @@ class TestBinaryNinjaAPI(unittest.TestCase):
         self.assertTrue(pickle_path, "Test pickle doesn't exist")
         try:
             # Python 2 does not have the encodings option
-            binary_oracle = pickle.load(open(pickle_path, "rb"), encoding='charmap')
+            binary_oracle = pickle.load(open(pickle_path, "rb"), encoding='utf8')
         except TypeError:
             binary_oracle = pickle.load(open(pickle_path, "rb"))
 
@@ -126,6 +135,7 @@ if __name__ == "__main__":
                 api_only = True
 
     test_suite = unittest.defaultTestLoader.loadTestsFromModule(api_test)
+    test_suite = unittest.defaultTestLoader.loadTestsFromModule(rebasing_test)
     if not api_only:
         test_suite.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(TestBinaryNinjaAPI))
     runner = unittest.TextTestRunner(verbosity=2)
@@ -183,7 +193,7 @@ class UnitTestFile:
         api_path = map(lambda x: '"{0}"'.format(x), api_path.split(os.sep))
         api_path = '{0}'.format(', '.join(api_path))
         test_store = self.test_store.replace(os.sep, '/') if os.name == 'nt' else self.test_store
-        self.f.write(self.template.format(self.outdir, self.tests, self.binary_tests, test_store, api_path).encode('charmap'))
+        self.f.write(self.template.format(self.outdir, self.tests, self.binary_tests, test_store, api_path).encode('utf8'))
         self.f.close()
 
     def add_verify(self, test_name):
@@ -294,7 +304,7 @@ def generate(test_store, outdir, exclude_binaries):
         name = oraclefile_rel[len(test_store):].replace(os.path.sep, "_").replace(".", "_")[1:]
         if name in ["helloworld", "duff", "partial_register_dataflow", "raw"]:
             test_data = testcommon.BinaryViewTestBuilder(oraclefile_rel, imageBase=0xf00000)
-            binary_oracle = OracleTestFile(oraclefile + "_rebasing")
+            binary_oracle = OracleTestFile(os.path.join(outdir, oraclefile_rel) + "_rebasing")
             for method in test_data.methods():
                 binary_oracle.add_entry(test_data, method)
             binary_oracle.close()

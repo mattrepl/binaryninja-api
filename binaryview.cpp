@@ -409,7 +409,10 @@ BinaryView* TagType::GetView() const
 
 std::string TagType::GetName() const
 {
-	return BNTagTypeGetName(m_object);
+	char* str = BNTagTypeGetName(m_object);
+	string result = str;
+	BNFreeString(str);
+	return result;
 }
 
 
@@ -711,7 +714,7 @@ void Segment::SetDataLength(uint64_t dataLength)
 }
 
 
-void Segment::SetFlags(uint64_t flags)
+void Segment::SetFlags(uint32_t flags)
 {
 	BNSegmentSetFlags(m_object, flags);
 }
@@ -725,13 +728,19 @@ Section::Section(BNSection* sec)
 
 std::string Section::GetName() const
 {
-	return BNSectionGetName(m_object);
+	char* str = BNSectionGetName(m_object);
+	string result = str;
+	BNFreeString(str);
+	return result;
 }
 
 
 std::string Section::GetType() const
 {
-	return BNSectionGetType(m_object);
+	char* str = BNSectionGetType(m_object);
+	string result = str;
+	BNFreeString(str);
+	return result;
 }
 
 
@@ -1151,12 +1160,6 @@ bool BinaryView::SaveAutoSnapshot(const function<void(size_t progress, size_t to
 void BinaryView::BeginUndoActions()
 {
 	m_file->BeginUndoActions();
-}
-
-
-void BinaryView::AddUndoAction(UndoAction* action)
-{
-	action->Add(m_object);
 }
 
 
@@ -2031,9 +2034,9 @@ void BinaryView::UndefineUserSymbol(Ref<Symbol> sym)
 }
 
 
-void BinaryView::DefineImportedFunction(Ref<Symbol> importAddressSym, Ref<Function> func)
+void BinaryView::DefineImportedFunction(Ref<Symbol> importAddressSym, Ref<Function> func, Ref<Type> type)
 {
-	BNDefineImportedFunction(m_object, importAddressSym->GetObject(), func->GetObject());
+	BNDefineImportedFunction(m_object, importAddressSym->GetObject(), func->GetObject(), type ? type->GetObject() : nullptr);
 }
 
 
@@ -2440,96 +2443,6 @@ uint64_t BinaryView::GetPreviousDataBeforeAddress(uint64_t addr)
 uint64_t BinaryView::GetPreviousDataVariableStartBeforeAddress(uint64_t addr)
 {
 	return BNGetPreviousDataVariableStartBeforeAddress(m_object, addr);
-}
-
-
-LinearDisassemblyPosition BinaryView::GetLinearDisassemblyPositionForAddress(uint64_t addr,
-	DisassemblySettings* settings)
-{
-	BNLinearDisassemblyPosition pos = BNGetLinearDisassemblyPositionForAddress(m_object, addr,
-		settings ? settings->GetObject() : nullptr);
-
-	LinearDisassemblyPosition result;
-	result.function = pos.function ? new Function(pos.function) : nullptr;
-	result.block = pos.block ? new BasicBlock(pos.block) : nullptr;
-	result.address = pos.address;
-	return result;
-}
-
-
-vector<LinearDisassemblyLine> BinaryView::GetPreviousLinearDisassemblyLines(LinearDisassemblyPosition& pos,
-	DisassemblySettings* settings)
-{
-	BNLinearDisassemblyPosition linearPos;
-	linearPos.function = pos.function ? BNNewFunctionReference(pos.function->GetObject()) : nullptr;
-	linearPos.block = pos.block ? BNNewBasicBlockReference(pos.block->GetObject()) : nullptr;
-	linearPos.address = pos.address;
-
-	size_t count;
-	BNLinearDisassemblyLine* lines = BNGetPreviousLinearDisassemblyLines(m_object, &linearPos,
-		settings ? settings->GetObject() : nullptr, &count);
-
-	vector<LinearDisassemblyLine> result;
-	result.reserve(count);
-	for (size_t i = 0; i < count; i++)
-	{
-		LinearDisassemblyLine line;
-		line.type = lines[i].type;
-		line.function = lines[i].function ? new Function(BNNewFunctionReference(lines[i].function)) : nullptr;
-		line.block = lines[i].block ? new BasicBlock(BNNewBasicBlockReference(lines[i].block)) : nullptr;
-		line.lineOffset = lines[i].lineOffset;
-		line.contents.addr = lines[i].contents.addr;
-		line.contents.instrIndex = lines[i].contents.instrIndex;
-		line.contents.highlight = lines[i].contents.highlight;
-		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
-		line.contents.tags = Tag::ConvertTagList(lines[i].contents.tags, lines[i].contents.tagCount);
-		result.push_back(line);
-	}
-
-	pos.function = linearPos.function ? new Function(linearPos.function) : nullptr;
-	pos.block = linearPos.block ? new BasicBlock(linearPos.block) : nullptr;
-	pos.address = linearPos.address;
-
-	BNFreeLinearDisassemblyLines(lines, count);
-	return result;
-}
-
-
-vector<LinearDisassemblyLine> BinaryView::GetNextLinearDisassemblyLines(LinearDisassemblyPosition& pos,
-	DisassemblySettings* settings)
-{
-	BNLinearDisassemblyPosition linearPos;
-	linearPos.function = pos.function ? BNNewFunctionReference(pos.function->GetObject()) : nullptr;
-	linearPos.block = pos.block ? BNNewBasicBlockReference(pos.block->GetObject()) : nullptr;
-	linearPos.address = pos.address;
-
-	size_t count;
-	BNLinearDisassemblyLine* lines = BNGetNextLinearDisassemblyLines(m_object, &linearPos,
-		settings ? settings->GetObject() : nullptr, &count);
-
-	vector<LinearDisassemblyLine> result;
-	result.reserve(count);
-	for (size_t i = 0; i < count; i++)
-	{
-		LinearDisassemblyLine line;
-		line.type = lines[i].type;
-		line.function = lines[i].function ? new Function(BNNewFunctionReference(lines[i].function)) : nullptr;
-		line.block = lines[i].block ? new BasicBlock(BNNewBasicBlockReference(lines[i].block)) : nullptr;
-		line.lineOffset = lines[i].lineOffset;
-		line.contents.addr = lines[i].contents.addr;
-		line.contents.instrIndex = lines[i].contents.instrIndex;
-		line.contents.highlight = lines[i].contents.highlight;
-		line.contents.tokens = InstructionTextToken::ConvertInstructionTextTokenList(lines[i].contents.tokens, lines[i].contents.count);
-		line.contents.tags = Tag::ConvertTagList(lines[i].contents.tags, lines[i].contents.tagCount);
-		result.push_back(line);
-	}
-
-	pos.function = linearPos.function ? new Function(linearPos.function) : nullptr;
-	pos.block = linearPos.block ? new BasicBlock(linearPos.block) : nullptr;
-	pos.address = linearPos.address;
-
-	BNFreeLinearDisassemblyLines(lines, count);
-	return result;
 }
 
 

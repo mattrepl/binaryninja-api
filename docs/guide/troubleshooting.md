@@ -10,13 +10,13 @@
 ## Bug Reproduction
 Running Binary Ninja with debug logging will make your bug report more useful.
 
-```
+``` bash
 ./binaryninja --debug --stderr-log
 ```
 
 Alternatively, it might be easier to save debug logs to a file instead:
 
-```
+``` bash
 ./binaryninja -d -l logfile.txt
 ```
 
@@ -41,18 +41,21 @@ Next, if running a python plugin, make sure the python requirements are met by y
 - If experiencing problems with Windows UAC permissions during an update, the easiest fix is to completely un-install and [recover][recover] the latest installer and license. Preferences are saved outside the installation folder and are preserved, though you might want to remove your [license](/getting-started/#license).
 - If you need to change the email address on your license, contact [support].
 
-## Platforms
+## Running as Root
 
-The below steps are specific to different platforms that Binary Ninja runs on.  See the [FAQ] for currently supported versions.
+Binary Ninja will refuse to run as root on Linux and MacOS platforms (this is partially enforced by the usage of an embedded QWebEngine which will not run as root). You can work-around this issue by either running as a regular user, or forcing BN to launch but you will need to also disable [active content](/getting-started/#updates.activeContent). If you try to use su or another similar tool, make sure that user has permission to the X11 session.
 
 ## API
 
  - If the GUI launches but the license file is not valid when launched from the command-line, check that you're using the right version of Python as only 64-bit Python 2.7, or 3.x versions are supported. Additionally, the [personal][purchase] edition does not support headless operation.
 
-
 ## Database Issues
 
  - BNDBs may grow in size after repeated saving/loading. While a future update to Binary Ninja will implement this optimization internally, this [unofficial script] may be useful for shrinking the size of a BNDB. Please ensure you backup your database prior to trying that script as it is not an officially supported operation.
+
+## Platforms
+
+The below steps are specific to different platforms that Binary Ninja runs on.  See the [FAQ] for currently supported versions.
 
 ### Windows
 
@@ -63,6 +66,20 @@ The below steps are specific to different platforms that Binary Ninja runs on.  
 
 Some graphics chipsets may experience problems with [scaling](https://github.com/Vector35/binaryninja-api/issues/1529) resulting in the top menu disappearing. In that case, the simplest fix is to set the environment variable `QT_OPENGL=angle`.
 
+#### VirtualBox
+
+If you're using Windows virtual machines within virtualbox, you may have trouble with the 3d acceleration drivers. If so, disabling the 3d acceleration is the easiest way to get BN working.
+
+You may also manually create a `settings.json` file in your [user folder](../getting-started.md#user-folder) with the contents though using the [plugin manager](plugins.md#plugin-manager) may also have problems:
+
+``` js
+{
+	"updates" :
+	{
+		"activeContent" : false
+	}
+}
+```
 
 ### MacOS
 
@@ -73,7 +90,7 @@ If you're running Catlina MacOS with the Python 3 installed by XCode and wish to
 1. Set the PYTHONHOME environment variable for your user to the following: `PYTHONHOME=/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.7`
 1. If you have an existing `settings.json` in `~/Library/Application Support/Binary Ninja/` merge the below, or create it with these contents if it does not exist:
 
-```
+``` js
 {
 	"downloadClient" :
 	{
@@ -90,7 +107,7 @@ If you're running Catlina MacOS with the Python 3 installed by XCode and wish to
 
 While OS X is generally the most trouble-free environment for Binary Ninja, very old versions may have problems with the RPATH for our binaries and libraries. There are two solutions. First, run Binary Ninja with: 
 
-```
+``` bash
 DYLD_LIBRARY_PATH="/Applications/Binary Ninja.app/Contents/MacOS" /Applications/Binary\ Ninja.app/Contents/MacOS/binaryninja
 ```
 
@@ -98,15 +115,15 @@ Or second, modify the binary itself using the [install_name_tool](https://blogs.
 
 #### Non-brew installed Python 3
 
-One potential issue for installed Python 3.x versions on MacOS is that the bundled certificates do not align with the native certificate store. This results in an erorr while attempting to download updates using the python provider. One of the following may fix this:
+One potential issue for installed Python 3.x versions on MacOS is that the bundled certificates do not align with the native certificate store. This results in an error while attempting to download updates using the python provider. One of the following may fix this:
 
-```
+``` bash
 pip install --upgrade certifi
 ```
 
 or:
 
-```
+``` bash
 open /Applications/Python\ 3.6/Install\ Certificates.command
 ```
 
@@ -118,7 +135,7 @@ Given the diversity of Linux distributions, some work-arounds are required to ru
 
 Debian requires one package be manually installed to support the emoji icons used in the Tag system:
 
-```
+``` bash
 apt install fonts-noto-color-emoji
 ```
 
@@ -126,7 +143,7 @@ apt install fonts-noto-color-emoji
 
 If you're having trouble getting Binary Ninja installed in a headless server install where you want to be able to X-Forward the GUI on a remote machine, the following should meet requirements (for at least 14.04 LTS):
 
-```
+``` bash
 apt-get install libgl1-mesa-glx libfontconfig1 libxrender1 libegl1-mesa libxi6 libnspr4 libsm6
 ```
 
@@ -138,7 +155,7 @@ apt-get install libgl1-mesa-glx libfontconfig1 libxrender1 libegl1-mesa libxi6 l
 
 To run Binary Ninja in a KDE based environment, set the `QT_PLUGIN_PATH` to the `QT` sub-folder:
 
-```
+``` bash
 cd ~/binaryninja
 QT_PLUGIN_PATH=./qt ./binaryninja
 ```
@@ -147,7 +164,7 @@ QT_PLUGIN_PATH=./qt ./binaryninja
 
 Here's a customer-provided nix derivation file for the Binary Ninja demo. Note that you'll likely want to update the SHA256 field with the latest value available [here](https://binary.ninja/js/hashes.js).  Adapt as necessary for other versions, or hop onto our slack (specifically the #unsupported-distros channel) to find out more:
 
-```
+``` js
 { stdenv, autoPatchelfHook, makeWrapper, fetchurl, unzip, libGL, glib, fontconfig, xlibs, dbus, xkeyboard_config }:
 stdenv.mkDerivation rec {
   name = "binary-ninja-demo";

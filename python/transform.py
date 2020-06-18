@@ -166,15 +166,18 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 	def __repr__(self):
 		return "<transform: %s>" % self.name
 
-	def __eq__(self, value):
-		if not isinstance(value, Transform):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
 
-	def __ne__(self, value):
-		if not isinstance(value, Transform):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash(ctypes.addressof(self.handle.contents))
 
 	def _get_parameters(self, ctxt, count):
 		try:
@@ -264,7 +267,7 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 			param_buf[i].value = data[i].handle
 		if not core.BNDecode(self.handle, input_buf.handle, output_buf.handle, param_buf, len(keys)):
 			return None
-		return str(output_buf)
+		return bytes(output_buf)
 
 	def encode(self, input_buf, params = {}):
 		if isinstance(input_buf, int) or isinstance(input_buf, numbers.Integral):
@@ -280,4 +283,4 @@ class Transform(with_metaclass(_TransformMetaClass, object)):
 			param_buf[i].value = data[i].handle
 		if not core.BNEncode(self.handle, input_buf.handle, output_buf.handle, param_buf, len(keys)):
 			return None
-		return str(output_buf)
+		return bytes(output_buf)

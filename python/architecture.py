@@ -79,12 +79,6 @@ class _ArchitectureMetaClass(type):
 		cls._registered_cb = arch._cb
 		arch.handle = core.BNRegisterArchitecture(cls.name, arch._cb)
 
-	def __setattr__(self, name, value):
-		try:
-			type.__setattr__(self, name, value)
-		except AttributeError:
-			raise AttributeError("attribute '%s' is read only" % name)
-
 
 class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	"""
@@ -122,6 +116,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 	stack_pointer = None
 	link_reg = None
 	global_regs = []
+	system_regs = []
 	flags = []
 	flag_write_types = []
 	semantic_flag_classes = []
@@ -194,6 +189,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			self._get_stack_pointer_register)
 		self._cb.getLinkRegister = self._cb.getLinkRegister.__class__(self._get_link_register)
 		self._cb.getGlobalRegisters = self._cb.getGlobalRegisters.__class__(self._get_global_registers)
+		self._cb.getSystemRegisters = self._cb.getSystemRegisters.__class__(self._get_system_registers)
 		self._cb.getRegisterStackName = self._cb.getRegisterStackName.__class__(self._get_register_stack_name)
 		self._cb.getAllRegisterStacks = self._cb.getAllRegisterStacks.__class__(self._get_all_register_stacks)
 		self._cb.getRegisterStackInfo = self._cb.getRegisterStackInfo.__class__(self._get_register_stack_info)
@@ -360,6 +356,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			self._semantic_class_for_flag_write_type[self._flag_write_types[write_type]] = sem_class_index
 
 		self.__dict__["global_regs"] = self.__class__.global_regs
+		self.__dict__["system_regs"] = self.__class__.system_regs
 
 		self._intrinsics = {}
 		self._intrinsics_by_index = {}
@@ -384,15 +381,32 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 		self._pending_name_and_type_lists = {}
 		self._pending_type_lists = {}
 
-	def __eq__(self, value):
-		if not isinstance(value, Architecture):
-			return False
-		return ctypes.addressof(self.handle.contents) == ctypes.addressof(value.handle.contents)
+	def __repr__(self):
+		return "<arch: %s>" % self.name
 
-	def __ne__(self, value):
-		if not isinstance(value, Architecture):
-			return True
-		return ctypes.addressof(self.handle.contents) != ctypes.addressof(value.handle.contents)
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return ctypes.addressof(self.handle.contents) == ctypes.addressof(other.handle.contents)
+
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __hash__(self):
+		return hash(ctypes.addressof(self.handle.contents))
+
+	def __setattr__(self, name, value):
+		if ((name == "name") or (name == "endianness") or (name == "address_size") or
+			(name == "default_int_size") or (name == "regs") or (name == "get_max_instruction_length") or
+			(name == "get_instruction_alignment")):
+			raise AttributeError("attribute '%s' is read only" % name)
+		else:
+			try:
+				object.__setattr__(self, name, value)
+			except AttributeError:
+				raise AttributeError("attribute '%s' is read only" % name)
 
 	@property
 	def list(self):
@@ -438,21 +452,6 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			result.append(binaryninja.typelibrary.TypeLibrary(core.BNNewTypeLibraryReference(handles[i])))
 		core.BNFreeTypeLibraryList(handles, count.value)
 		return result
-
-
-	def __setattr__(self, name, value):
-		if ((name == "name") or (name == "endianness") or (name == "address_size") or
-			(name == "default_int_size") or (name == "regs") or (name == "get_max_instruction_length") or
-			(name == "get_instruction_alignment")):
-			raise AttributeError("attribute '%s' is read only" % name)
-		else:
-			try:
-				object.__setattr__(self, name, value)
-			except AttributeError:
-				raise AttributeError("attribute '%s' is read only" % name)
-
-	def __repr__(self):
-		return "<arch: %s>" % self.name
 
 	def _init(self, ctxt, handle):
 		self.handle = handle
@@ -926,6 +925,20 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			count[0] = 0
 			return None
 
+	def _get_system_registers(self, ctxt, count):
+		try:
+			count[0] = len(self.system_regs)
+			reg_buf = (ctypes.c_uint * len(self.system_regs))()
+			for i in range(0, len(self.system_regs)):
+				reg_buf[i] = self._all_regs[self.system_regs[i]]
+			result = ctypes.cast(reg_buf, ctypes.c_void_p)
+			self._pending_reg_lists[result.value] = (result, reg_buf)
+			return result.value
+		except KeyError:
+			log.log_error(traceback.format_exc())
+			count[0] = 0
+			return None
+
 	def _get_register_stack_name(self, ctxt, reg_stack):
 		try:
 			if reg_stack in self._reg_stacks_by_index:
@@ -1080,7 +1093,7 @@ class Architecture(with_metaclass(_ArchitectureMetaClass, object)):
 			ctypes.memmove(buf, data, len(data))
 			core.BNSetDataBufferContents(result, buf, len(data))
 			return True
-		except ValueError as e:  # Overriden `assemble` functions should raise a ValueError if the input was invalid (with a reasonable error message)
+		except ValueError as e:  # Overridden `assemble` functions should raise a ValueError if the input was invalid (with a reasonable error message)
 			log.log_error(traceback.format_exc())
 			errors[0] = core.BNAllocString(str(e))
 			return False
@@ -2231,6 +2244,13 @@ class CoreArchitecture(Architecture):
 		core.BNFreeRegisterList(regs)
 
 		count = ctypes.c_ulonglong()
+		regs = core.BNGetArchitectureSystemRegisters(self.handle, count)
+		self.__dict__["system_regs"] = []
+		for i in range(0, count.value):
+			self.system_regs.append(core.BNGetArchitectureRegisterName(self.handle, regs[i]))
+		core.BNFreeRegisterList(regs)
+
+		count = ctypes.c_ulonglong()
 		regs = core.BNGetAllArchitectureRegisterStacks(self.handle, count)
 		self._all_reg_stacks = {}
 		self._reg_stacks_by_index = {}
@@ -2701,6 +2721,7 @@ class ArchitectureHook(CoreArchitecture):
 	def register(self):
 		self.__class__._registered_cb = self._cb
 		self.handle = core.BNRegisterArchitectureHook(self._base_arch.handle, self._cb)
+		core.BNFinalizeArchitectureHook(self._base_arch.handle)
 
 	@property
 	def base_arch(self):
@@ -2724,15 +2745,38 @@ class ReferenceSource(object):
 		else:
 			return "<ref: %#x>" % self._address
 
-	def __eq__(self, value):
-		if not isinstance(value, ReferenceSource):
-			return False
-		return self.function == value.function and self.arch == value.arch and self.address == value.address
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return (self.function, self.arch, self.address) == (other.address, other.function, other.arch)
 
-	def __lt__(self, value):
-		if not isinstance(value, ReferenceSource):
-			raise TypeError("Can only compare to other ReferenceSource objects")
-		return self.address < value.address
+	def __ne__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return not (self == other)
+
+	def __lt__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.address < other.address
+
+	def __gt__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.address > other.address
+
+	def __ge__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.address >= other.address
+
+	def __le__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.address <= other.address
+
+	def __hash__(self):
+		return hash((self._function, self._arch, self._address))
 
 	@property
 	def function(self):

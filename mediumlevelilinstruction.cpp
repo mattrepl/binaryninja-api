@@ -30,7 +30,9 @@ using namespace BinaryNinjaCore;
 using namespace BinaryNinja;
 #endif
 
+#ifndef BINARYNINJACORE_LIBRARY
 using namespace std;
+#endif
 
 
 unordered_map<MediumLevelILOperandUsage, MediumLevelILOperandType>
@@ -1070,9 +1072,9 @@ RegisterValue MediumLevelILInstructionBase::GetValue() const
 }
 
 
-PossibleValueSet MediumLevelILInstructionBase::GetPossibleValues() const
+PossibleValueSet MediumLevelILInstructionBase::GetPossibleValues(const set<BNDataFlowQueryOption>& options) const
 {
-	return function->GetPossibleExprValues(*(const MediumLevelILInstruction*)this);
+	return function->GetPossibleExprValues(*(const MediumLevelILInstruction*)this, options);
 }
 
 
@@ -2446,7 +2448,7 @@ ExprId MediumLevelILFunction::RotateLeft(size_t size, ExprId left, ExprId right,
 ExprId MediumLevelILFunction::RotateLeftCarry(size_t size, ExprId left, ExprId right, ExprId carry,
 	const ILSourceLocation& loc)
 {
-	return AddExprWithLocation(MLIL_RRC, loc, size, left, right, carry);
+	return AddExprWithLocation(MLIL_RLC, loc, size, left, right, carry);
 }
 
 

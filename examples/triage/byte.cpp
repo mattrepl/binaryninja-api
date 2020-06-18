@@ -145,16 +145,17 @@ uint64_t ByteView::getCurrentOffset()
 }
 
 
-void ByteView::getSelectionOffsets(uint64_t& start, uint64_t& end)
+BNAddressRange ByteView::getSelectionOffsets()
 {
-	start = m_selectionStartAddr;
-	end = m_cursorAddr;
+	uint64_t start = m_selectionStartAddr;
+	uint64_t end = m_cursorAddr;
 	if (end < start)
 	{
 		uint64_t t = start;
 		start = end;
 		end = t;
 	}
+	return { start, end };
 }
 
 
@@ -264,7 +265,7 @@ void ByteView::adjustSize(int width, int height)
 	m_addrWidth = QString::number(m_data->GetEnd(), 16).size();
 	if (m_addrWidth < 8)
 		m_addrWidth = 8;
-	int cols = ((width - 4) / m_render.getFontWidth()) - (m_addrWidth + 2);
+	int cols = ((width - 4) / m_render.getFontWidth()) - ((int)m_addrWidth + 2);
 	if (cols < 1)
 		cols = 1;
 	if ((size_t)cols != m_cols)
@@ -552,7 +553,7 @@ void ByteView::updateCaret()
 		if (((m_prevCursorAddr >= m_lines[i].address) && (m_prevCursorAddr <= (m_lines[i].address + m_lines[i].length))) ||
 			((m_cursorAddr >= m_lines[i].address) && (m_cursorAddr <= (m_lines[i].address + m_lines[i].length))))
 		{
-			viewport()->update(0, (i - m_topLine) * m_render.getFontHeight(),
+			viewport()->update(0, (int)(i - m_topLine) * m_render.getFontHeight(),
 				viewport()->size().width(), m_render.getFontHeight() + 3);
 		}
 	}
@@ -580,9 +581,8 @@ void ByteView::paintEvent(QPaintEvent* event)
 
 	// Compute selection range
 	bool selection = false;
-	uint64_t selStart, selEnd;
-	getSelectionOffsets(selStart, selEnd);
-	if (selStart != selEnd)
+	BNAddressRange selectionRange = getSelectionOffsets();
+	if (selectionRange.start != selectionRange.end)
 		selection = true;
 
 	// Draw selection
@@ -596,18 +596,18 @@ void ByteView::paintEvent(QPaintEvent* event)
 		int endX = 0;
 		for (size_t i = 0; i < m_lines.size(); i++)
 		{
-			if (selStart >= m_lines[i].address)
+			if (selectionRange.start >= m_lines[i].address)
 			{
 				startY = (int)(i - m_topLine);
-				startX = (int)(selStart - m_lines[i].address);
+				startX = (int)(selectionRange.start - m_lines[i].address);
 				if (startX > (int)m_cols)
 					startX = (int)m_cols;
 				startValid = true;
 			}
-			if (selEnd >= m_lines[i].address)
+			if (selectionRange.end >= m_lines[i].address)
 			{
 				endY = (int)(i - m_topLine);
-				endX = (int)(selEnd - m_lines[i].address);
+				endX = (int)(selectionRange.end - m_lines[i].address);
 				if (endX > (int)m_cols)
 					endX = (int)m_cols;
 				endValid = true;
@@ -692,9 +692,10 @@ void ByteView::paintEvent(QPaintEvent* event)
 
 void ByteView::wheelEvent(QWheelEvent* event)
 {
-	if (event->orientation() == Qt::Horizontal)
+	if (event->angleDelta().x()) // ignore horizontal scrolling
 		return;
-	m_wheelDelta -= event->delta();
+
+	m_wheelDelta -= event->angleDelta().y();
 	if ((m_wheelDelta <= -40) || (m_wheelDelta >= 40))
 	{
 		int lines = m_wheelDelta / 40;

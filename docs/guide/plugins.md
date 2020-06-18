@@ -57,7 +57,7 @@ You can manually install a plugin either by adding a folder which contains it (t
 
 Note, if manually cloning the [api repository](https://github.com/Vector35/binaryninja-api), make sure to:
 
-```
+``` text
 git submodule update --init --recursive
 ```
 
@@ -67,7 +67,7 @@ after cloning or else the submodules will not actually be downloaded.
 
 Binary Ninja now offers a [PluginManager API] which can simplify the process of finding and installing plugins. From the console:
 
-```
+``` text
 >>> mgr = RepositoryManager()
 >>> dir(mgr)
 ['__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', 'add_repository', 'check_for_updates', 'default_repository', 'handle', 'plugins', 'repositories']
@@ -92,7 +92,7 @@ Then just restart, and your plugin will be loaded.
 
 Because Windows ships with an embedded version of Python, if you want to install plugins inside that Python, you'll need to either adjust your `sys.path` to include the locations for the other libraries (making sure they're compatible with the built-in version), or else install them directly in the environment via:
 
-```
+``` py
 import pip
 pip.main(['install', '--quiet', 'packagename'])
 ```
@@ -105,7 +105,7 @@ Binary Ninja can also switch to a different installed version of Python using th
 
 Troubleshooting many Binary Ninja problems is helped by enabling debug logs and logging the output to a file. Just launch Binary Ninja with 
 
-```
+``` text
 /Applications/Binary\ Ninja.app/Contents/MacOS/binaryninja -d -l /tmp/bnlog.txt
 ```
 
@@ -129,9 +129,9 @@ Available via [settings], enabling plugin debugging mode will enable additional 
 
 ### UI Elements
 
-While it is possible to use Qt to directly create [UI enhancements] to Binary Ninja, we don't recommend it. First, there's a chance that we'll change UI platforms in the future (in particular because Qt's QWidget performance is actually getting worse with newer versions and they're trying to move everyone to QTQuick which might as well be Electron). Secondly, it is much more difficult for other users to install your plugin given the much more complicated dependencies and cross-platform headache of setup.
+There are several ways to create UI elements in Binary Ninja. The first is to use the simplified [interaction] API which lets you make simple UI elements for use in GUI plugins in Binary Ninja. As an added bonus, they all have fallbacks that will work in headless console-based applications as well. Plugins that use these API include the [angr] and [nampa] plugins.
 
-The officially supported mechanism (until the 1.2 release which will include much more featureful UI API enhancements) are available from the [interaction API] and shown off in the [angr] and [nampa] plugins.
+The second and more powerful (but more complicated) mechanism is to leverage the _binaryninjaui_ module. Documentation is forthcoming, but there are several examples ([1], [2], [3]) in the meantime. Additionally, the _binaryninjaui_ module is shipped with each build of binaryninja and includes header files that is helpful for using the APIs even when they're not documented.
 
 ### Testing
 
@@ -150,5 +150,9 @@ For the Personal edition, we recommend simply commenting out the `register_` fun
 [angr]: https://github.com/Vector35/binaryninja-api/blob/dev/python/examples/angr_plugin.py
 [nampa]: https://github.com/kenoph/nampa
 [installing the API]: https://github.com/Vector35/binaryninja-api/blob/dev/scripts/install_api.py
-[settings]: ../getting-started.html#ui.debugMode
-[python.interpreter setting]: ../getting-started.html#python.interpreter
+[settings]: ../getting-started.md#ui.debugMode
+[python.interpreter setting]: ../getting-started.md#python.interpreter
+[interaction]: https://api.binary.ninja/binaryninja.interaction-module.html
+[1]: https://github.com/Vector35/binaryninja-api/tree/dev/python/examples/kaitai
+[2]: https://github.com/Vector35/binaryninja-api/tree/dev/python/examples/snippets
+[3]: https://github.com/Vector35/binaryninja-api/tree/dev/python/examples/triage

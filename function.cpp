@@ -293,6 +293,12 @@ Ref<LowLevelILFunction> Function::GetLowLevelIL() const
 }
 
 
+Ref<LowLevelILFunction> Function::GetLowLevelILIfAvailable() const
+{
+	return new LowLevelILFunction(BNGetFunctionLowLevelILIfAvailable(m_object));
+}
+
+
 size_t Function::GetLowLevelILForInstruction(Architecture* arch, uint64_t addr)
 {
 	return BNGetLowLevelILForInstruction(m_object, arch->GetObject(), addr);
@@ -467,6 +473,12 @@ Ref<LowLevelILFunction> Function::GetLiftedIL() const
 }
 
 
+Ref<LowLevelILFunction> Function::GetLiftedILIfAvailable() const
+{
+	return new LowLevelILFunction(BNGetFunctionLiftedILIfAvailable(m_object));
+}
+
+
 size_t Function::GetLiftedILForInstruction(Architecture* arch, uint64_t addr)
 {
 	return BNGetLiftedILForInstruction(m_object, arch->GetObject(), addr);
@@ -524,6 +536,24 @@ set<uint32_t> Function::GetFlagsWrittenByLiftedILInstruction(size_t i)
 Ref<MediumLevelILFunction> Function::GetMediumLevelIL() const
 {
 	return new MediumLevelILFunction(BNGetFunctionMediumLevelIL(m_object));
+}
+
+
+Ref<MediumLevelILFunction> Function::GetMediumLevelILIfAvailable() const
+{
+	return new MediumLevelILFunction(BNGetFunctionMediumLevelILIfAvailable(m_object));
+}
+
+
+Ref<HighLevelILFunction> Function::GetHighLevelIL() const
+{
+	return new HighLevelILFunction(BNGetFunctionHighLevelIL(m_object));
+}
+
+
+Ref<HighLevelILFunction> Function::GetHighLevelILIfAvailable() const
+{
+	return new HighLevelILFunction(BNGetFunctionHighLevelILIfAvailable(m_object));
 }
 
 
@@ -839,9 +869,9 @@ void Function::SetClobberedRegisters(const Confidence<std::set<uint32_t>>& clobb
 }
 
 
-void Function::ApplyImportedTypes(Symbol* sym)
+void Function::ApplyImportedTypes(Symbol* sym, Ref<Type> type)
 {
-	BNApplyImportedTypes(m_object, sym->GetObject());
+	BNApplyImportedTypes(m_object, sym->GetObject(), type ? type->GetObject() : nullptr);
 }
 
 
@@ -1685,6 +1715,21 @@ Ref<FlowGraph> Function::GetUnresolvedStackAdjustmentGraph()
 void Function::RequestDebugReport(const string& name)
 {
 	BNRequestFunctionDebugReport(m_object, name.c_str());
+}
+
+
+string Function::GetGotoLabelName(uint64_t labelId)
+{
+	char* name = BNGetGotoLabelName(m_object, labelId);
+	string result = name;
+	BNFreeString(name);
+	return result;
+}
+
+
+void Function::SetGotoLabelName(uint64_t labelId, const std::string& name)
+{
+	BNSetUserGotoLabelName(m_object, labelId, name.c_str());
 }
 
 

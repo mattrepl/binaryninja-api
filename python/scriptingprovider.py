@@ -281,7 +281,7 @@ class ScriptingInstance(object):
 		core.BNSetScriptingInstanceCurrentSelection(self.handle, begin, end)
 
 	def complete_input(self, text, state):
-		return core.BNScriptingInstanceCompleteInput(self.handlue, text, state)
+		return core.BNScriptingInstanceCompleteInput(self.handle, text, state)
 
 	def register_output_listener(self, listener):
 		listener._register(self.handle)
@@ -291,7 +291,7 @@ class ScriptingInstance(object):
 		if listener in self.listeners:
 			listener._unregister(self.handle)
 			self.listeners.remove(listener)
-	
+
 	@property
 	def delimiters(self):
 		return core.BNGetScriptingInstanceDelimiters(self.handle)
@@ -340,9 +340,6 @@ class _ScriptingProviderMetaclass(type):
 
 
 class ScriptingProvider(with_metaclass(_ScriptingProviderMetaclass, object)):
-
-	name = None
-	instance_class = None
 	_registered_providers = []
 
 	def __init__(self, handle = None):
@@ -351,10 +348,17 @@ class ScriptingProvider(with_metaclass(_ScriptingProviderMetaclass, object)):
 			self.__dict__["name"] = core.BNGetScriptingProviderName(handle)
 
 	@property
+	def name(self):
+		return NotImplemented
+
+	@property
+	def instance_class(self):
+		return NotImplemented
+
+	@property
 	def list(self):
 		"""Allow tab completion to discover metaclass list property"""
 		pass
-
 
 	def register(self):
 		self._cb = core.BNScriptingProviderCallbacks()
@@ -501,6 +505,30 @@ class _PythonScriptingInstanceInput(object):
 			return result
 
 
+class BlacklistedDict(dict):
+
+	def __init__(self, blacklist, *args):
+		super(BlacklistedDict, self).__init__(*args)
+		self.__blacklist = set(blacklist)
+		self._blacklist_enabled = True
+
+	def __setitem__(self, k, v):
+		if self.blacklist_enabled and k in self.__blacklist:
+			log.log_warn('Setting variable "{}" will have no affect as it is automatically controlled by the ScriptingProvider.'.format(k))
+		super(BlacklistedDict, self).__setitem__(k, v)
+
+	def enable_blacklist(self, enabled):
+		self.__enable_blacklist = enabled
+
+	@property
+	def blacklist_enabled(self):
+		return self._blacklist_enabled
+
+	@blacklist_enabled.setter
+	def blacklist_enabled(self, value):
+		self._blacklist_enabled = value
+
+
 class PythonScriptingInstance(ScriptingInstance):
 	_interpreter = threading.local()
 
@@ -508,7 +536,9 @@ class PythonScriptingInstance(ScriptingInstance):
 		def __init__(self, instance):
 			super(PythonScriptingInstance.InterpreterThread, self).__init__()
 			self.instance = instance
-			self.locals = {"__name__": "__console__", "__doc__": None, "binaryninja": sys.modules[__name__]}
+			# Note: "current_address" and "here" are interactive auto-variables (i.e. can be set by user and programmatically)
+			blacklisted_vars = {"current_view", "bv", "current_function", "current_basic_block", "current_selection", "current_llil", "current_mlil", "current_hlil"}
+			self.locals = BlacklistedDict(blacklisted_vars, {"__name__": "__console__", "__doc__": None, "binaryninja": sys.modules[__name__]})
 			self.interpreter = code.InteractiveConsole(self.locals)
 			self.event = threading.Event()
 			self.daemon = True
@@ -615,6 +645,7 @@ class PythonScriptingInstance(ScriptingInstance):
 			self.active_selection_begin = self.current_selection_begin
 			self.active_selection_end = self.current_selection_end
 
+			self.locals.blacklist_enabled = False
 			self.locals["current_view"] = self.active_view
 			self.locals["bv"] = self.active_view
 			self.locals["current_function"] = self.active_func
@@ -625,9 +656,12 @@ class PythonScriptingInstance(ScriptingInstance):
 			if self.active_func is None:
 				self.locals["current_llil"] = None
 				self.locals["current_mlil"] = None
+				self.locals["current_hlil"] = None
 			else:
 				self.locals["current_llil"] = self.active_func.llil
 				self.locals["current_mlil"] = self.active_func.mlil
+				self.locals["current_hlil"] = self.active_func.hlil
+			self.locals.blacklist_enabled = True
 
 
 		def get_selected_data(self):
