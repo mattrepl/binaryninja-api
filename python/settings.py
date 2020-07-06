@@ -54,8 +54,8 @@ class Settings(object):
 		================= ========================== ============== ================================ ===============================
 		Default           SettingsDefaultScope       Lowest         Settings Schema                  Settings Schema
 		User              SettingsUserScope          -              <User Directory>/settings.json   <TBD>
-		Workspace         SettingsWorkspaceScope     -              <TBD>                            <TBD>
-		Context           SettingsContextScope       Highest        BinaryView (Storage in bndb)     BinaryView (Storage in bndb)
+		Project           SettingsProjectScope       -              <TBD>                            <TBD>
+		Resource          SettingsResourceScope      Highest        BinaryView (Storage in BNDB)     SettingsResource (Customizable)
 		================= ========================== ============== ================================ ===============================
 
 	Individual settings are identified by a key, which is a string in the form of **'<group>.<name>'**. Groups provide a simple way \
@@ -101,9 +101,9 @@ class Settings(object):
 	def set_resource_id(self, resource_id = None):
 		"""
 		``set_resource_id`` Sets the resource identifier for this class:`Settings` instance. When accessing setting values at the \
-		``SettingsContextScope`` level, the resource identifier is passed along through the backing store interface.
+		``SettingsResourceScope`` level, the resource identifier is passed along through the backing store interface.
 
-		.. note:: Currently the only available backing store for ``SettingsContextScope`` is a :class:`BinaryView` object. In the context \
+		.. note:: Currently the only available backing store for ``SettingsResourceScope`` is a :class:`BinaryView` object. In the context \
 		of a :class:`BinaryView` the resource identifier is the :class:`BinaryViewType` name. All settings for this type of backing store \
 		are saved in the *'Raw'* :class:`BinaryViewType`. This enables the configuration of setting values such that they are available \
 		during :class:`BinaryView` creation and initialization.
@@ -200,8 +200,15 @@ class Settings(object):
 	def serialize_schema(self):
 		return core.BNSettingsSerializeSchema(self.handle)
 
-	def copy_values_from(self, source, scope = SettingsScope.SettingsAutoScope):
-		return core.BNSettingsCopyValuesFrom(self.handle, source.handle, scope)
+	def deserialize_settings(self, contents, view = None, scope = SettingsScope.SettingsAutoScope):
+		if view is not None:
+			view = view.handle
+		return core.BNDeserializeSettings(self.handle, contents, view, scope)
+
+	def serialize_settings(self, view = None, scope = SettingsScope.SettingsAutoScope):
+		if view is not None:
+			view = view.handle
+		return core.BNSerializeSettings(self.handle, view, scope)
 
 	def reset(self, key, view = None, scope = SettingsScope.SettingsAutoScope):
 		if view is not None:

@@ -2238,8 +2238,8 @@ extern "C"
 		SettingsAutoScope = 1,
 		SettingsDefaultScope = 2,
 		SettingsUserScope = 4,
-		SettingsWorkspaceScope = 8,
-		SettingsContextScope = 0x10
+		SettingsProjectScope = 8,
+		SettingsResourceScope = 0x10
 	};
 
 	enum BNLinearViewObjectIdentifierType
@@ -2262,6 +2262,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNFreeStringList(char** strs, size_t count);
 
 	BINARYNINJACOREAPI void BNShutdown(void);
+	BINARYNINJACOREAPI bool BNIsShutdownRequested(void);
 
 	BINARYNINJACOREAPI char* BNGetVersionString(void);
 	BINARYNINJACOREAPI uint32_t BNGetBuildId(void);
@@ -3231,8 +3232,7 @@ __attribute__ ((format (printf, 1, 2)))
 
 	BINARYNINJACOREAPI bool BNParseTypeString(BNBinaryView* view, const char* text,
 		BNQualifiedNameAndType* result, char** errors);
-	BINARYNINJACOREAPI bool BNParseTypesString(BNBinaryView* view, const char* text,
-		BNQualifiedNameAndType** result, size_t* count, char** errors);
+	BINARYNINJACOREAPI bool BNParseTypesString(BNBinaryView* view, const char* text, BNTypeParserResult* result, char** errors);
 	BINARYNINJACOREAPI void BNFreeQualifiedNameAndType(BNQualifiedNameAndType* obj);
 	BINARYNINJACOREAPI void BNFreeQualifiedNameAndTypeArray(BNQualifiedNameAndType* obj, size_t count);
 
@@ -4526,7 +4526,6 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI bool BNDeserializeSettings(BNSettings* settings, const char* contents, BNBinaryView* view, BNSettingsScope scope);
 	BINARYNINJACOREAPI char* BNSerializeSettings(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope);
 
-	BINARYNINJACOREAPI bool BNSettingsCopyValuesFrom(BNSettings* settings, BNSettings* source, BNSettingsScope scope);
 	BINARYNINJACOREAPI bool BNSettingsReset(BNSettings* settings, const char* key, BNBinaryView* view, BNSettingsScope scope);
 	BINARYNINJACOREAPI bool BNSettingsResetAll(BNSettings* settings, BNBinaryView* view, BNSettingsScope scope, bool schemaOnly);
 
