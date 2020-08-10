@@ -6,10 +6,10 @@ import zipfile
 import inspect
 import binaryninja as binja
 from binaryninja.binaryview import BinaryViewType, BinaryView
-from binaryninja.filemetadata import FileMetadata
+from binaryninja.filemetadata import FileMetadata, SaveSettings
 from binaryninja.datarender import DataRenderer
 from binaryninja.function import InstructionTextToken, DisassemblyTextLine
-from binaryninja.enums import InstructionTextTokenType
+from binaryninja.enums import InstructionTextTokenType, SaveOption
 import subprocess
 import re
 
@@ -226,12 +226,12 @@ class BinaryViewTestBuilder(Builder):
         retinfo = []
         for func in self.bv.functions:
             func = func.low_level_il
-            for reg_name in self.bv.arch.regs:
+            for reg_name in sorted(self.bv.arch.regs):
                 reg = binja.SSARegister(reg_name, 1)
                 retinfo.append("Function: {:x} Reg {} SSA definition: {}".format(func.source_function.start, reg_name, str(getattr(func.get_ssa_reg_definition(reg), 'instr_index', None))))
                 retinfo.append("Function: {:x} Reg {} SSA uses: {}".format(func.source_function.start, reg_name, str(list(map(lambda instr: instr.instr_index, func.get_ssa_reg_uses(reg))))))
                 retinfo.append("Function: {:x} Reg {} SSA value: {}".format(func.source_function.start, reg_name, str(func.get_ssa_reg_value(reg))))
-            for flag_name in self.bv.arch.flags:
+            for flag_name in sorted(self.bv.arch.flags):
                 flag = binja.SSAFlag(flag_name, 1)
                 retinfo.append("Function: {:x} Flag {} SSA uses: {}".format(func.source_function.start, flag_name, str(list(map(lambda instr: instr.instr_index, func.get_ssa_flag_uses(flag))))))
                 retinfo.append("Function: {:x} Flag {} SSA value: {}".format(func.source_function.start, flag_name, str(func.get_ssa_flag_value(flag))))
@@ -953,15 +953,18 @@ class VerifyBuilder(Builder):
 
             bv.begin_undo_actions()
             bv.functions[0].set_comment(bv.functions[0].start, "Function start")
-            bv.functions[0].set_comment(bv.functions[0].start, "Function start!")
-            bv.commit_undo_actions()
-
-            bv.begin_undo_actions()
-            bv.add_function(bv.functions[0].start + 4)
             bv.commit_undo_actions()
 
             comments = self.get_comments(bv)
             functions = self.get_functions(bv)
+
+            bv.begin_undo_actions()
+            bv.functions[0].set_comment(bv.functions[0].start, "Function start!")
+            bv.commit_undo_actions()
+
+            bv.begin_undo_actions()
+            bv.create_user_function(bv.start)
+            bv.commit_undo_actions()
 
             bv.create_database(temp_name)
             bv.file.close()
@@ -981,41 +984,6 @@ class VerifyBuilder(Builder):
             os.unlink(temp_name)
 
             return functions == bndb_functions and comments == bndb_comments
-        finally:
-            self.delete_package("helloworld")
-
-    def test_verify_clean_save(self):
-        file_name = self.unpackage_file("helloworld")
-        try:
-            temp_name = next(tempfile._get_candidate_names()) + ".bndb"
-
-            bv = binja.BinaryViewType['ELF'].open(file_name)
-            bv.update_analysis_and_wait()
-
-            bv.begin_undo_actions()
-            bv.functions[0].set_comment(bv.functions[0].start, "This is a secret comment")
-            bv.commit_undo_actions()
-
-            bv.begin_undo_actions()
-            bv.functions[0].set_comment(bv.functions[0].start, "Function start!")
-            bv.commit_undo_actions()
-
-            bv.create_database(temp_name, clean=True)
-            bv.file.close()
-            del bv
-
-            bv = binja.FileMetadata(temp_name).open_existing_database(temp_name).get_view_of_type('ELF')
-            bv.update_analysis_and_wait()
-
-            bv.undo()
-
-            comment = bv.functions[0].get_comment_at(bv.functions[0].start)
-
-            bv.file.close()
-            del bv
-            os.unlink(temp_name)
-
-            return comment == "Function start!"
         finally:
             self.delete_package("helloworld")
 
@@ -1062,3 +1030,47 @@ class VerifyBuilder(Builder):
             return ok
         finally:
             self.delete_package("helloworld")
+
+    def test_univeral_loader(self):
+        """Universal Mach-O Loader Tests"""
+        file_name = self.unpackage_file("fat_macho_9arch")
+        save_setting_value = binja.Settings().get_string_list("files.universal.architecturePreference")
+        binja.Settings().reset("files.universal.architecturePreference")
+        try:
+            bv = binja.BinaryViewType.get_view_of_file(file_name)
+            assert(bv.view_type == "Mach-O")
+            assert(bv.arch.name == "x86")
+            assert(bv.start == 0x1000)
+            load_setting_keys = bv.get_load_settings("Mach-O")
+            assert(load_setting_keys is not None)
+            assert(len(bv.get_load_settings("Mach-O").keys()) == 1)
+            assert(bv.get_load_settings("Mach-O").get_integer("loader.macho.universalImageOffset") == 0x1000)
+            bv.file.close()
+
+            binja.Settings().set_string_list("files.universal.architecturePreference", ["arm64"])
+            bv = binja.BinaryViewType.get_view_of_file(file_name)
+            assert(bv.view_type == "Mach-O")
+            assert(bv.arch.name == "aarch64")
+            assert(bv.start == 0x100000000)
+            load_setting_keys = bv.get_load_settings("Mach-O")
+            assert(load_setting_keys is not None)
+            assert(len(bv.get_load_settings("Mach-O").keys()) == 1)
+            assert(bv.get_load_settings("Mach-O").get_integer("loader.macho.universalImageOffset") == 0x4c000)
+            bv.file.close()
+
+            binja.Settings().set_string_list("files.universal.architecturePreference", ["x86_64", "arm64"])
+            bv = binja.BinaryViewType.get_view_of_file_with_options(file_name, options={'loader.imageBase': 0xfffffff0000})
+            assert(bv.view_type == "Mach-O")
+            assert(bv.arch.name == "x86_64")
+            assert(bv.start == 0xfffffff0000)
+            load_setting_keys = bv.get_load_settings("Mach-O")
+            assert(load_setting_keys is not None)
+            assert(len(bv.get_load_settings("Mach-O").keys()) == 8)
+            assert(bv.get_load_settings("Mach-O").get_integer("loader.macho.universalImageOffset") == 0x8000)
+            bv.file.close()
+
+            binja.Settings().set_string_list("files.universal.architecturePreference", save_setting_value)
+            return True
+        finally:
+            binja.Settings().set_string_list("files.universal.architecturePreference", save_setting_value)
+            self.delete_package("fat_macho_9arch")

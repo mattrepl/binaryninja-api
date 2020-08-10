@@ -1,5 +1,9 @@
 # Troubleshooting
 
+## Python 2
+
+With Python 2 [officially unmaintained](https://pythonclock.org/), the last stable release of Binary Ninja with support for it will be the [2.2 stable release](https://github.com/Vector35/binaryninja-api/milestone/7).
+
 ## Basics
 
  - Have you searched [known issues]?
@@ -66,9 +70,9 @@ The below steps are specific to different platforms that Binary Ninja runs on.  
 
 Some graphics chipsets may experience problems with [scaling](https://github.com/Vector35/binaryninja-api/issues/1529) resulting in the top menu disappearing. In that case, the simplest fix is to set the environment variable `QT_OPENGL=angle`.
 
-#### VirtualBox
+#### VirtualBox and VMWare
 
-If you're using Windows virtual machines within virtualbox, you may have trouble with the 3d acceleration drivers. If so, disabling the 3d acceleration is the easiest way to get BN working.
+If you're using Windows virtual machines within virtualbox or VMWare, you may have trouble with the 3d acceleration drivers. If so, disabling the 3d acceleration is the easiest way to get BN working.
 
 You may also manually create a `settings.json` file in your [user folder](../getting-started.md#user-folder) with the contents though using the [plugin manager](plugins.md#plugin-manager) may also have problems:
 

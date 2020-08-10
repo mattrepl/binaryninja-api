@@ -76,6 +76,8 @@ GenericHeaders::GenericHeaders(BinaryViewRef data)
 		AddField("Platform", QString::fromStdString(data->GetDefaultPlatform()->GetName()));
 	if (data->IsValidOffset(data->GetEntryPoint()))
 		AddField("Entry Point", QString("0x") + QString::number(data->GetEntryPoint(), 16), CodeHeaderField);
+	if (data->IsValidOffset(data->GetStart()))
+		AddField("Current Base", QString("0x") + QString::number(data->GetStart(), 16), AddressHeaderField);
 }
 
 
@@ -124,6 +126,8 @@ PEHeaders::PEHeaders(BinaryViewRef data)
 	uint64_t secs = GetValueOfStructMember(data, "COFF_Header", peOffset, "timeDateStamp");
 	QDateTime t = QDateTime::fromSecsSinceEpoch(secs);
 	AddField("Timestamp", t.toString());
+
+	AddField("Current Base", QString("0x") + QString::number(data->GetStart(), 16), AddressHeaderField);
 
 	uint64_t base = GetValueOfStructMember(data, optHeaderName, optHeaderStart, "imageBase");
 	AddField("Image Base", QString("0x") + QString::number(base, 16), AddressHeaderField);

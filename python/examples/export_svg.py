@@ -3,17 +3,18 @@ import os
 import webbrowser
 import time
 import sys
-try:
-    from urllib import pathname2url          # Python 2.x
-except:
-    from urllib.request import pathname2url  # Python 3.x
+from pathlib import Path
+from urllib.request import pathname2url
 
-from binaryninja.interaction import get_save_filename_input, show_message_box
-from binaryninja.enums import MessageBoxButtonSet, MessageBoxIcon, MessageBoxButtonResult, InstructionTextTokenType, BranchType
+from binaryninja.interaction import get_save_filename_input, show_message_box, TextLineField, ChoiceField, SaveFileNameField, get_form_input
+from binaryninja.settings import Settings
+from binaryninja.enums import MessageBoxButtonSet, MessageBoxIcon, MessageBoxButtonResult, InstructionTextTokenType, BranchType, DisassemblyOption, FunctionGraphType
+from binaryninja.function import DisassemblySettings
 from binaryninja.plugin import PluginCommand
 
 colors = {'green': [162, 217, 175], 'red': [222, 143, 151], 'blue': [128, 198, 233], 'cyan': [142, 230, 237], 'lightCyan': [
-    176, 221, 228], 'orange': [237, 189, 129], 'yellow': [237, 223, 179], 'magenta': [218, 196, 209], 'none': [74, 74, 74]}
+    176, 221, 228], 'orange': [237, 189, 129], 'yellow': [237, 223, 179], 'magenta': [218, 196, 209], 'none': [74, 74, 74],
+    'disabled': [144, 144, 144]}
 
 escape_table = {
     "'": "&#39;",
@@ -35,30 +36,52 @@ def escape(toescape):
 
 
 def save_svg(bv, function):
-    address = hex(function.start).replace('L', '')
-    path = os.path.dirname(bv.file.filename)
+    sym = bv.get_symbol_at(function.start)
+    if sym:
+        offset = sym.name
+    else:
+        offset = "%x" % function.start
+    path = Path(os.path.dirname(bv.file.filename))
     origname = os.path.basename(bv.file.filename)
-    filename = os.path.join(
-        path, 'binaryninja-{filename}-{function}.html'.format(filename=origname, function=address))
-    outputfile = get_save_filename_input(
-        'File name for export_svg', 'HTML files (*.html)', filename)
-    if sys.platform == "win32":
-        outputfile = outputfile.replace('/', '\\')
-    if outputfile is None:
+    filename = path / f'binaryninja-{origname}-{offset}.html'
+
+    functionChoice = TextLineField("Blank to accept default")
+    # TODO: implement linear disassembly settings and output
+    modeChoices = ["Graph"]
+    modeChoiceField = ChoiceField("Mode", modeChoices)
+    if Settings().get_bool('ui.debugMode'):
+        formChoices = ["Assembly", "Lifted IL", "LLIL", "LLIL SSA", "Mapped Medium", "Mapped Medium SSA", "MLIL", "MLIL SSA", "HLIL", "HLIL SSA"]
+        formChoiceField = ChoiceField("Form", formChoices)
+    else:
+        formChoices = ["Assembly", "LLIL", "MLIL", "HLIL"]
+        formChoiceField = ChoiceField("Form", formChoices)
+
+    showOpcodes = ChoiceField("Show Opcodes", ["Yes", "No"])
+    showAddresses = ChoiceField("Show Addresses", ["Yes", "No"])
+
+    saveFileChoices = SaveFileNameField("Output file", 'HTML files (*.html)', str(filename))
+    if not get_form_input([f'Current Function: {offset}', functionChoice, formChoiceField, modeChoiceField, showOpcodes, showAddresses, saveFileChoices], "SVG Export") or saveFileChoices.result is None:
         return
-    content = render_svg(function, origname)
+    if saveFileChoices.result == '':
+        outputfile = filename
+    else:
+        outputfile = saveFileChoices.result
+    content = render_svg(function, offset, modeChoices[modeChoiceField.result], formChoices[formChoiceField.result], showOpcodes.result == 0, showAddresses.result == 0, origname)
     output = open(outputfile, 'w')
     output.write(content)
     output.close()
     result = show_message_box("Open SVG", "Would you like to view the exported SVG?",
                               buttons=MessageBoxButtonSet.YesNoButtonSet, icon=MessageBoxIcon.QuestionIcon)
     if result == MessageBoxButtonResult.YesButton:
-        url = 'file:{}'.format(pathname2url(bytes(outputfile)))
-        webbrowser.open(url)
+        # might need more testing, latest py3 on windows seems.... broken with these APIs relative to other platforms
+        if sys.platform == 'win32':
+            webbrowser.open(outputfile)
+        else:
+            webbrowser.open('file://' + str(outputfile))
 
 
 def instruction_data_flow(function, address):
-    ''' TODO:  Extract data flow information '''
+    # TODO:  Extract data flow information
     length = function.view.get_instruction_length(address)
     func_bytes = function.view.read(address, length)
     if sys.version_info[0] == 3:
@@ -69,8 +92,33 @@ def instruction_data_flow(function, address):
     return 'Opcode: {bytes}'.format(bytes=padded)
 
 
-def render_svg(function, origname):
-    graph = function.create_graph()
+def render_svg(function, offset, mode, form, showOpcodes, showAddresses, origname):
+    settings = DisassemblySettings()
+    if showOpcodes:
+        settings.set_option(DisassemblyOption.ShowOpcode, True)
+    if showAddresses:
+        settings.set_option(DisassemblyOption.ShowAddress, True)
+    if form == "LLIL":
+        graph_type = FunctionGraphType.LowLevelILFunctionGraph
+    elif form == "LLIL SSA":
+        graph_type = FunctionGraphType.LowLevelILSSAFormFunctionGraph
+    elif form == "Lifted IL":
+        graph_type = FunctionGraphType.LiftedILFunctionGraph
+    elif form == "Mapped Medium":
+        graph_type = FunctionGraphType.MappedMediumLevelILFunctionGraph
+    elif form == "Mapped Medium SSA":
+        graph_type = FunctionGraphType.MappedMediumLevelILSSAFormFunctionGraph
+    elif form == "MLIL":
+        graph_type = FunctionGraphType.MediumLevelILFunctionGraph
+    elif form == "MLIL SSA":
+        graph_type = FunctionGraphType.MediumLevelILSSAFormFunctionGraph
+    elif form == "HLIL":
+        graph_type = FunctionGraphType.HighLevelILFunctionGraph
+    elif form == "HLIL SSA":
+        graph_type = FunctionGraphType.HighLevelILSSAFormFunctionGraph
+    else:
+        graph_type = FunctionGraphType.NormalFunctionGraph
+    graph = function.create_graph(graph_type=graph_type, settings=settings)
     graph.layout_and_wait()
     heightconst = 15
     ratio = 0.48
@@ -135,7 +183,7 @@ def render_svg(function, origname):
 			.TextToken, .InstructionToken, .BeginMemoryOperandToken, .EndMemoryOperandToken {
 				fill: rgb(224, 224, 224);
 			}
-			.PossibleAddressToken, .IntegerToken {
+			.CodeRelativeAddressToken, .PossibleAddressToken, .IntegerToken, .AddressDisplayToken {
 				fill: rgb(162, 217, 175);
 			}
 			.RegisterToken {
@@ -144,11 +192,14 @@ def render_svg(function, origname):
 			.AnnotationToken {
 				fill: rgb(218, 196, 209);
 			}
-			.ImportToken {
+			.IndirectImportToken, .ImportToken {
 				fill: rgb(237, 189, 129);
 			}
-			.StackVariableToken {
+			.LocalVariableToken, .StackVariableToken {
 				fill: rgb(193, 220, 199);
+			}
+			.OpcodeToken {
+				fill: rgb(144, 144, 144);
 			}
 		</style>
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.2/jquery.min.js"></script>
@@ -242,8 +293,8 @@ def render_svg(function, origname):
     output += '	</g>\n'
     output += '</svg>'
 
-    output += '<p>This CFG generated by <a href="https://binary.ninja/">Binary Ninja</a> from {filename} on {timestring}.</p>'.format(
-        filename=origname, timestring=time.strftime("%c"))
+    output += '<p>This CFG generated by <a href="https://binary.ninja/">Binary Ninja</a> from {filename} on {timestring} showing {function} as {form}.</p>'.format(
+        filename=origname, timestring=time.strftime("%c"), function=offset, form=form)
     output += '</html>'
     return output
 

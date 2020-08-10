@@ -201,6 +201,7 @@ public:
 	virtual uint64_t getCurrentOffset() override;
 	virtual BNAddressRange getSelectionOffsets() override;
 	virtual BNAddressRange getSelectionForInfo() override;
+	virtual void setSelectionOffsets(BNAddressRange range) override;
 	virtual bool navigate(uint64_t pos) override;
 	virtual bool navigateToFunction(FunctionRef func, uint64_t pos) override;
 	bool navigateWithHistoryEntry(uint64_t addr, FlowGraphHistoryEntry* entry);
@@ -315,6 +316,8 @@ private Q_SLOTS:
 	void displayAsUnsignedHexadecimal();
 	void displayAsCharacterConstant();
 	void displayAsPointer();
+	void displayAsFloat();
+	void displayAsDouble();
 
 	void makePtr();
 	void makeString();
