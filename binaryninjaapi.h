@@ -1370,6 +1370,7 @@ __attribute__ ((format (printf, 1, 2)))
 	};
 
 	struct QualifiedNameAndType;
+	struct PossibleValueSet;
 	class Metadata;
 	class QueryMetadataException: public std::exception
 	{
@@ -1659,9 +1660,13 @@ __attribute__ ((format (printf, 1, 2)))
 		uint64_t GetPreviousDataBeforeAddress(uint64_t addr);
 		uint64_t GetPreviousDataVariableStartBeforeAddress(uint64_t addr);
 
-		bool ParseTypeString(const std::string& text, QualifiedNameAndType& result, std::string& errors);
+		bool ParsePossibleValueSet(const std::string& value, BNRegisterValueType state, PossibleValueSet& result, uint64_t here, std::string& errors);
+
+		bool ParseTypeString(const std::string& text, QualifiedNameAndType& result, std::string& errors,
+			const std::set<QualifiedName>& typesAllowRedefinition = {});
 		bool ParseTypeString(const std::string& text, std::map<QualifiedName, Ref<Type>>& types,
-			std::map<QualifiedName, Ref<Type>>& variables, std::map<QualifiedName, Ref<Type>>& functions, std::string& errors);
+			std::map<QualifiedName, Ref<Type>>& variables, std::map<QualifiedName, Ref<Type>>& functions, std::string& errors,
+			const std::set<QualifiedName>& typesAllowRedefinition = {});
 
 		std::map<QualifiedName, Ref<Type>> GetTypes();
 		std::vector<QualifiedName> GetTypeNames(const std::string& matching="");
@@ -2909,6 +2914,24 @@ __attribute__ ((format (printf, 1, 2)))
 		Ref<Architecture> arch;
 		uint64_t address;
 
+		ArchAndAddr& operator=(const ArchAndAddr& a)
+		{
+		    arch = a.arch;
+		    address = a.address;
+		    return *this;
+		}
+		bool operator==(const ArchAndAddr& a) const
+		{
+		    return (arch == a.arch) && (address == a.address);
+		}
+		bool operator<(const ArchAndAddr& a) const
+		{
+		    if (arch < a.arch)
+			return true;
+		    if (arch > a.arch)
+			return false;
+		    return address < a.address;
+		}
 		ArchAndAddr(): arch(nullptr), address(0) {}
 		ArchAndAddr(Architecture* a, uint64_t addr): arch(a), address(addr) {}
 	};
@@ -2938,13 +2961,16 @@ __attribute__ ((format (printf, 1, 2)))
 		std::vector<BNValueRange> ranges;
 		std::set<int64_t> valueSet;
 		std::vector<LookupTableEntry> table;
+		size_t count;
 
 		static PossibleValueSet FromAPIObject(BNPossibleValueSet& value);
+		BNPossibleValueSet ToAPIObject();
 	};
 
 	class FlowGraph;
 	class MediumLevelILFunction;
 	class HighLevelILFunction;
+	struct SSAVariable;
 
 	class Function: public CoreRefCountObject<BNFunction, BNNewFunctionReference, BNFreeFunction>
 	{
@@ -3159,6 +3185,11 @@ __attribute__ ((format (printf, 1, 2)))
 		void SetAnalysisSkipOverride(BNFunctionAnalysisSkipOverride skip);
 
 		Ref<FlowGraph> GetUnresolvedStackAdjustmentGraph();
+
+		void SetUserVariableValue(const Variable& var, uint64_t defAddr, PossibleValueSet& value);
+		void ClearUserVariableValue(const Variable& var, uint64_t defAddr);
+		std::map<Variable, std::map<ArchAndAddr, PossibleValueSet>> GetAllUserVariableValues();
+		void ClearAllUserVariableValues();
 
 		void RequestDebugReport(const std::string& name);
 
@@ -3702,7 +3733,6 @@ __attribute__ ((format (printf, 1, 2)))
 	};
 
 	struct MediumLevelILInstruction;
-	struct SSAVariable;
 
 	class MediumLevelILFunction: public CoreRefCountObject<BNMediumLevelILFunction,
 		BNNewMediumLevelILFunctionReference, BNFreeMediumLevelILFunction>

@@ -140,7 +140,7 @@ class BINARYNINJAUIAPI TypeView: public QAbstractScrollArea, public View, public
 	void goToAddress(bool selecting);
 
 	void moveCursorToMouse(QMouseEvent* event, bool selecting);
-	void createNewTypes(const QString& definition = "");
+	void createNewTypes(const QString& definition = "", const std::set<BinaryNinja::QualifiedName>& typesAllowRedefinition = {});
 	void bindActions();
 
 	void checkForValidSelection();
@@ -157,6 +157,7 @@ public:
 	virtual BinaryViewRef getData() override { return m_data; }
 	virtual uint64_t getCurrentOffset() override;
 	virtual BNAddressRange getSelectionOffsets() override;
+	virtual void setSelectionOffsets(BNAddressRange range) override;
 	virtual bool navigate(uint64_t) override;
 
 	virtual std::string getNavigationMode() override;

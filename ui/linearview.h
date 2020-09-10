@@ -197,7 +197,10 @@ private Q_SLOTS:
 	void defineNameAtAddr(uint64_t addr);
 	void defineName();
 	void undefineName();
+	void setUserVariableValue();
+	void clearUserVariableValue();
 	void createFunc();
+	void createFuncWithPlatform(PlatformRef platform);
 	void defineFuncName();
 	void undefineFunc();
 	void reanalyze();
@@ -226,6 +229,7 @@ private Q_SLOTS:
 	void makePtr();
 	void makeString();
 	void changeType();
+	void undefineVariable();
 	void createStructOrInferStructureType();
 	void createArray();
 	void createStruct();

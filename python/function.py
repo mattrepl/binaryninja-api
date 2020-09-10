@@ -263,8 +263,11 @@ class ValueRange(object):
 			return "<range: %#x to %#x>" % (self.start, self.end)
 		return "<range: %#x to %#x, step %#x>" % (self.start, self.end, self.step)
 
-
-
+	def __eq__(self, other):
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		return self.start == other.start and self.end == other.end and self.step == other.step
+		
 	@property
 	def start(self):
 		""" """
@@ -297,6 +300,11 @@ class ValueRange(object):
 
 
 class PossibleValueSet(object):
+	"""
+	`class PossibleValueSet` PossibleValueSet is used to define possible values
+	that a variable can take. It contains methods to instantiate different
+	value sets such as Constant, Signed/Unsigned Ranges, etc.
+	"""
 	def __init__(self, arch = None, value = None):
 		if value is None:
 			self._type = RegisterValueType.UndeterminedValue
@@ -346,6 +354,7 @@ class PossibleValueSet(object):
 			self._values = set()
 			for i in range(0, value.count):
 				self._values.add(value.valueSet[i])
+		self._count = value.count
 
 	def __repr__(self):
 		if self._type == RegisterValueType.EntryValue:
@@ -355,7 +364,7 @@ class PossibleValueSet(object):
 		if self._type == RegisterValueType.ConstantPointerValue:
 			return "<const ptr %#x>" % self.value
 		if self._type == RegisterValueType.StackFrameOffset:
-			return "<stack frame offset %#x>" % self.offset
+			return "<stack frame offset %#x>" % self._offset
 		if self._type == RegisterValueType.SignedRangeValue:
 			return "<signed ranges: %s>" % repr(self.ranges)
 		if self._type == RegisterValueType.UnsignedRangeValue:
@@ -371,10 +380,20 @@ class PossibleValueSet(object):
 		return "<undetermined>"
 
 	def __eq__(self, other):
-		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and isinstance(other, numbers.Integral):
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue] and isinstance(other, numbers.Integral):
 			return self.value == other
-		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantValue] and hasattr(other, 'type') and other.type == self.type:
+		if not isinstance(other, self.__class__):
+			return NotImplemented
+		if self.type in [RegisterValueType.ConstantValue, RegisterValueType.ConstantPointerValue]:
 			return self.value == other.value
+		elif self.type == RegisterValueType.StackFrameOffset:
+			return self.offset == other.offset
+		elif self.type in [RegisterValueType.SignedRangeValue, RegisterValueType.UnsignedRangeValue]:
+			return self.ranges == other.ranges
+		elif self.type in [RegisterValueType.InSetOfValues, RegisterValueType.NotInSetOfValues]:
+			return self.values == other.values
+		elif self.type == RegisterValueType.UndeterminedValue and hasattr(other, 'type'):
+			return self.type == other.type
 		else:
 			return self == other
 
@@ -383,6 +402,63 @@ class PossibleValueSet(object):
 			return NotImplemented
 		return not (self == other)
 
+	def _to_api_object(self):
+		result = core.BNPossibleValueSet()
+		result.state = RegisterValueType(self.type)
+		if self.type == RegisterValueType.UndeterminedValue:
+			return result
+		elif self.type == RegisterValueType.ConstantValue:
+			result.value = self.value
+		elif self.type == RegisterValueType.ConstantPointerValue:
+			result.value = self.value
+		elif self.type == RegisterValueType.StackFrameOffset:
+			result.offset = self.value
+		elif self.type == RegisterValueType.SignedRangeValue:
+			result.offset = self.value
+			result.ranges = (core.BNValueRange * self.count)()
+			for i in range(0, self.count):
+				start = self.ranges[i].start
+				end = self.ranges[i].end
+				if start & (1 << 63):
+					start |= ~((1 << 63) - 1)
+				if end & (1 << 63):
+					end |= ~((1 << 63) - 1)
+				value_range = core.BNValueRange()
+				value_range.start = start
+				value_range.end = end
+				value_range.step = self.ranges[i].step
+				result.ranges[i] = value_range
+			result.count = self.count
+		elif self.type == RegisterValueType.UnsignedRangeValue:
+			result.offset = self.value
+			result.ranges = (core.BNValueRange * self.count)()
+			for i in range(0, self.count):
+				value_range = core.BNValueRange()
+				value_range.start = self.ranges[i].start
+				value_range.end = self.ranges[i].end
+				value_range.step = self.ranges[i].step
+				result.ranges[i] = value_range
+			result.count = self.count
+		elif self.type == RegisterValueType.LookupTableValue:
+			result.table = []
+			result.mapping = {}
+			for i in range(self.count):
+				from_list = []
+				for j in range(0, self.table[i].fromCount):
+					from_list.append(self.table[i].fromValues[j])
+					result.mapping[self.table[i].fromValues[j]] = result.table[i].toValue
+				result.table.append(LookupTableEntry(from_list, result.table[i].toValue))
+			result.count = self.count
+		elif (self.type == RegisterValueType.InSetOfValues) or (self.type == RegisterValueType.NotInSetOfValues):
+			values = (ctypes.c_longlong * self.count)()
+			i = 0
+			for value in self.values:
+				values[i] = value
+				i += 1
+			result.valueSet = ctypes.cast(values, ctypes.POINTER(ctypes.c_longlong))
+			result.count = self.count
+		return result
+	
 	@property
 	def type(self):
 		""" """
@@ -463,6 +539,165 @@ class PossibleValueSet(object):
 		""" """
 		self._values = value
 
+	@property
+	def count(self):
+		""" """
+		return self._count
+
+	@count.setter
+	def count(self, value):
+		self._count = value
+
+	@classmethod
+	def undetermined(self):
+		"""
+		Create a PossibleValueSet object of type UndeterminedValue.
+
+		:return: PossibleValueSet object of type UndeterminedValue
+		:rtype: PossibleValueSet
+		"""
+		return PossibleValueSet()
+
+	@classmethod
+	def constant(self, value):
+		""" 
+		Create a constant valued PossibleValueSet object.
+
+		:param int value: Integer value of the constant
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.ConstantValue
+		result.value = value
+		return result
+
+	@classmethod
+	def constant_ptr(self, value):
+		""" 
+		Create constant pointer valued PossibleValueSet object.
+
+		:param int value: Integer value of the constant pointer
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.ConstantPointerValue
+		result.value = value
+		return result
+
+	@classmethod
+	def stack_frame_offset(self, offset):
+		""" 
+		Create a PossibleValueSet object for a stack frame offset.
+
+		:param int value: Integer value of the offset
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.StackFrameOffset
+		result.offset = offset
+		return result
+
+	@classmethod
+	def signed_range_value(self, ranges):
+		"""
+		Create a PossibleValueSet object for a signed range of values.
+
+		:param list(ValueRange) ranges: List of ValueRanges
+		:rtype: PossibleValueSet
+		:Example:
+			
+			>>> v_1 = ValueRange(-5, -1, 1)
+			>>> v_2 = ValueRange(7, 10, 1)
+			>>> val = PossibleValueSet.signed_range_value([v_1, v_2])
+			<signed ranges: [<range: -0x5 to -0x1>, <range: 0x7 to 0xa>]>
+		"""
+		result = PossibleValueSet()
+		result.value = 0
+		result.type = RegisterValueType.SignedRangeValue
+		result.ranges = ranges
+		result.count = len(ranges)
+		return result
+
+	@classmethod
+	def unsigned_range_value(self, ranges):
+		"""
+		Create a PossibleValueSet object for a unsigned signed range of values.
+
+		:param list(ValueRange) ranges: List of ValueRanges
+		:rtype: PossibleValueSet
+		:Example:
+
+			>>> v_1 = ValueRange(0, 5, 1)
+			>>> v_2 = ValueRange(7, 10, 1)
+			>>> val = PossibleValueSet.unsigned_range_value([v_1, v_2])
+			<unsigned ranges: [<range: 0x0 to 0x5>, <range: 0x7 to 0xa>]>
+		"""
+		result = PossibleValueSet()
+		result.value = 0
+		result.type = RegisterValueType.UnsignedRangeValue
+		result.ranges = ranges
+		result.count = len(ranges)
+		return result
+
+	@classmethod
+	def in_set_of_values(self, values):
+		"""
+		Create a PossibleValueSet object for a value in a set of values.
+
+		:param list(int) values: List of integer values
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.InSetOfValues
+		result.values = set(values)
+		result.count = len(values)
+		return result
+
+	@classmethod 
+	def not_in_set_of_values(self, values):
+		"""
+		Create a PossibleValueSet object for a value NOT in a set of values.
+
+		:param list(int) values: List of integer values
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.NotInSetOfValues
+		result.values = set(values)
+		result.count = len(values)
+		return result
+
+	@classmethod
+	def lookup_table_value(self, lookup_table, mapping):
+		"""
+		Create a PossibleValueSet object for a value which is a member of a 
+		lookuptable.
+
+		:param list(LookupTableEntry) lookup_table: List of table entries
+		:param dict of (int, int) mapping: Mapping used for resolution
+		:rtype: PossibleValueSet
+		"""
+		result = PossibleValueSet()
+		result.type = RegisterValueType.LookupTableValue
+		result.table = lookup_table
+		result.mapping = mapping
+		return result
+
+class ArchAndAddr(object):
+	def __init__(self, arch = None, addr = 0):
+		self._arch = binaryninja.architecture.CoreArchitecture(arch)
+		self._addr = addr
+
+	def __repr__(self):
+		return "archandaddr <%s @ %#x>" % (self._arch.name, self._addr)
+
+	@property
+	def arch(self):
+		return self._arch
+
+	@property
+	def addr(self):
+		return self._addr
 
 class StackVariableReference(object):
 	def __init__(self, src_operand, t, name, var, ref_ofs, size):
@@ -652,7 +887,16 @@ class Variable(object):
 
 	@name.setter
 	def name(self, value):
-		self._name = value
+		if self._function is None:
+			self._name = value
+		elif value:
+			self._function.create_user_var(self, self._type, value)
+			self._name = value
+		else:
+			# Name will be reassigned by analysis on the next analysis update
+			# This Variable object is will not be updated
+			self._function.create_user_var(self, self._type, "")
+			self._name = None
 
 	@property
 	def type(self):
@@ -718,6 +962,15 @@ class ConstantReference(object):
 	def intermediate(self, value):
 		self._intermediate = value
 
+
+class UserVariableValueInfo(object):
+	def __init__(self, var, def_site, value):
+		self.var = var
+		self.def_site = def_site
+		self.value = value
+
+	def __repr__(self):
+		return "<user value for %s @ %s:%#x -> %s>" % (self.var, self.def_site.arch.name, self.def_site.addr, self.value)
 
 
 class IndirectBranchInfo(object):
@@ -2422,6 +2675,108 @@ class Function(object):
 			arch = self.arch
 		return core.BNIsCallInstruction(self.handle, arch.handle, addr)
 
+	def set_user_var_value(self, var, def_addr, value):
+		"""
+		`set_user_var_value` allows the user to specify a PossibleValueSet value for an MLIL variable at its
+		definition site. 
+
+		..warning:: Setting the variable value, triggers a reanalysis of the function and allows the dataflow
+		to compute and propagate values which depend on the current variable. This implies that branch conditions
+		whose values can be determined statically will be computed, leading to potential branch elimination at
+		the HLIL layer.
+
+		:param Variable var: Variable for which the value is to be set
+		:param int def_addr: Address of the definition site of the variable
+		:param PossibleValueSet value: Informed value of the variable
+		:rtype: None
+
+		:Example:
+
+			>>> var = current_mlil[0].operands[0]
+			>>> def_site = 0x40108d
+			>>> value = PossibleValueSet.constant(5)
+			>>> current_function.set_user_var_value(var, def_site, value)
+		"""
+		var_defs = self.mlil.get_var_definitions(var)
+		if var_defs is None:
+			raise ValueError("Could not get definition for Variable")
+		found = False
+		for site in var_defs:
+			if site.address == def_addr:
+				found = True
+				break
+		if not found:
+			raise ValueError("No definition for Variable found at given address")
+		def_site = core.BNArchitectureAndAddress()
+		def_site.arch = self.arch.handle
+		def_site.address = def_addr
+
+		var_data = core.BNVariable()
+		var_data.type = var.source_type
+		var_data.index = var.index
+		var_data.storage = var.storage
+		core.BNSetUserVariableValue(self.handle, var_data, def_site, value._to_api_object())
+
+	def clear_user_var_value(self, var, def_addr):
+		"""
+		Clears a previously defined user variable value.
+
+		:param Variable var: Variable for which the value was informed
+		:param int def_addr: Address of the definition site of the variable
+		:rtype: None
+		"""
+		var_defs = self.mlil.get_var_definitions(var)
+		if var_defs is None:
+			raise ValueError("Could not get definition for Variable")
+		found = False
+		for site in var_defs:
+			if site.address == def_addr:
+				found = True
+				break
+		if not found:
+			raise ValueError("No definition for Variable found at given address")
+		def_site = core.BNArchitectureAndAddress()
+		def_site.arch = self.arch.handle
+		def_site.address = def_addr
+
+		var_data = core.BNVariable()
+		var_data.type = var.source_type
+		var_data.index = var.index 
+		var_data.storage = var.storage
+		core.BNClearUserVariableValue(self.handle, var_data, def_site)
+
+	def get_all_user_var_values(self):
+		"""
+		Returns a map of current defined user variable values.
+
+		:returns: Map of user current defined user variable values and their definition sites.
+		:type: dict of (Variable, dict of (ArchAndAddr, PossibleValueSet))
+		"""
+		count = ctypes.c_ulonglong(0)
+		var_values = core.BNGetAllUserVariableValues(self.handle, count)
+		result = {}
+		i = 0
+		for i in range(count.value):
+			var_val = var_values[i]
+			var = Variable(self, var_val.var.type, var_val.var.index, var_val.var.storage)
+			if var not in result:
+				result[var] = {}
+			def_site = ArchAndAddr(var_val.defSite.arch, var_val.defSite.address)
+			result[var][def_site] = PossibleValueSet(def_site.arch, var_val.value)
+		core.BNFreeUserVariableValues(var_values)
+		return result
+
+	def clear_all_user_var_values(self):
+		"""
+		Clear all user defined variable values.
+
+		:rtype: None
+		"""
+		all_values = self.get_all_user_var_values()
+		for var in all_values:
+			for def_site in all_values[var]:
+				self.clear_user_var_value(var, def_site.addr)
+
 	def request_debug_report(self, name):
 		core.BNRequestFunctionDebugReport(self.handle, name)
 		self.view.update_analysis()
@@ -3094,6 +3449,7 @@ class InstructionTextToken(object):
 	@property
 	def width(self):
 		return self._width
+
 
 
 class DisassemblyTextRenderer(object):

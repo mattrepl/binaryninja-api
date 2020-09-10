@@ -257,6 +257,8 @@ extern "C"
 		StructureHexDumpTextToken = 27,
 		GotoLabelToken = 28,
 		CommentToken = 29,
+		PossibleValueToken = 30,
+		PossibleValueTypeToken = 31,
 		// The following are output by the analysis system automatically, these should
 		// not be used directly by the architecture plugins
 		CodeSymbolToken = 64,
@@ -635,6 +637,7 @@ extern "C"
 		OperatorEqualNameType,
 		OperatorNotEqualNameType,
 		OperatorArrayNameType,
+		OperatorDotNameType,
 		OperatorArrowNameType,
 		OperatorStarNameType,
 		OperatorIncrementNameType,
@@ -878,6 +881,7 @@ extern "C"
 		BNLookupTableEntry* table;
 		size_t count;
 	};
+
 
 	struct BNRegisterOrConstant
 	{
@@ -1731,6 +1735,12 @@ extern "C"
 		size_t typeCount, variableCount, functionCount;
 	};
 
+	struct BNQualifiedNameList
+	{
+		BNQualifiedName* names;
+		size_t count;
+	};
+
 	enum BNUpdateResult
 	{
 		UpdateFailed = 0,
@@ -1862,6 +1872,13 @@ extern "C"
 	{
 		BNArchitecture* arch;
 		uint64_t address;
+	};
+
+	struct BNUserVariableValue
+	{
+		BNVariable var;
+		BNArchitectureAndAddress defSite;
+		BNPossibleValueSet value;
 	};
 
 	enum BNAnalysisState
@@ -3251,8 +3268,9 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI bool BNGetDataVariableAtAddress(BNBinaryView* view, uint64_t addr, BNDataVariable* var);
 
 	BINARYNINJACOREAPI bool BNParseTypeString(BNBinaryView* view, const char* text,
-		BNQualifiedNameAndType* result, char** errors);
-	BINARYNINJACOREAPI bool BNParseTypesString(BNBinaryView* view, const char* text, BNTypeParserResult* result, char** errors);
+		BNQualifiedNameAndType* result, char** errors, BNQualifiedNameList* typesAllowRedefinition);
+	BINARYNINJACOREAPI bool BNParseTypesString(BNBinaryView* view, const char* text, BNTypeParserResult* result,
+		char** errors, BNQualifiedNameList* typesAllowRedefinition);
 	BINARYNINJACOREAPI void BNFreeQualifiedNameAndType(BNQualifiedNameAndType* obj);
 	BINARYNINJACOREAPI void BNFreeQualifiedNameAndTypeArray(BNQualifiedNameAndType* obj, size_t count);
 
@@ -3367,6 +3385,13 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNFreeAnalysisPerformanceInfo(BNPerformanceInfo* info, size_t count);
 
 	BINARYNINJACOREAPI BNFlowGraph* BNGetUnresolvedStackAdjustmentGraph(BNFunction* func);
+
+	BINARYNINJACOREAPI void BNSetUserVariableValue(BNFunction* func, const BNVariable* var, const BNArchitectureAndAddress* defSite, const BNPossibleValueSet* value);
+	BINARYNINJACOREAPI void BNClearUserVariableValue(BNFunction* func, const BNVariable* var, const BNArchitectureAndAddress* defSite);
+	BINARYNINJACOREAPI BNUserVariableValue* BNGetAllUserVariableValues(BNFunction *func, size_t* count);
+	BINARYNINJACOREAPI void BNFreeUserVariableValues(BNUserVariableValue* result);
+	BINARYNINJACOREAPI bool BNParsePossibleValueSet(BNBinaryView* view, const char* valueText, BNRegisterValueType state, 
+			BNPossibleValueSet* result, uint64_t here, char** errors);
 
 	BINARYNINJACOREAPI void BNRequestFunctionDebugReport(BNFunction* func, const char* name);
 

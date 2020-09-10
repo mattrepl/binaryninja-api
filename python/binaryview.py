@@ -1583,6 +1583,13 @@ class BinaryView(object):
 				yield il_block
 
 	@property
+	def hlil_basic_blocks(self):
+		"""A generator of all HighLevelILBasicBlock objects in the BinaryView"""
+		for func in self:
+			for il_block in func.hlil.basic_blocks:
+				yield il_block
+
+	@property
 	def instructions(self):
 		"""A generator of instruction tokens and their start addresses"""
 		for block in self.basic_blocks:
@@ -1602,6 +1609,13 @@ class BinaryView(object):
 	def mlil_instructions(self):
 		"""A generator of mlil instructions"""
 		for block in self.mlil_basic_blocks:
+			for i in block:
+				yield i
+
+	@property
+	def hlil_instructions(self):
+		"""A generator of hlil instructions"""
+		for block in self.hlil_basic_blocks:
 			for i in block:
 				yield i
 
@@ -2492,13 +2506,17 @@ class BinaryView(object):
 
 	def create_database(self, filename, progress_func=None, settings=None):
 		"""
-		``create_database`` writes the current database (.bndb) file out to the specified file.
+		``create_database`` writes the current database (.bndb) out to the specified file.
 
 		:param str filename: path and filename to write the bndb to, this string `should` have ".bndb" appended to it.
 		:param callback progress_func: optional function to be called with the current progress and total count.
 		:param SaveSettings settings: optional argument for special save options.
 		:return: true on success, false on failure
 		:rtype: bool
+		:Example:
+			>>> settings = SaveSettings()
+			>>> bv.create_database(f"{bv.file.filename}.bndb", None, settings)
+			True
 		"""
 		return self._file.create_database(filename, progress_func, settings)
 
@@ -4221,7 +4239,7 @@ class BinaryView(object):
 		br.seek(addr)
 		length = 0
 		c = br.read8()
-		while c > 0 and c <= 0x7f:
+		while c is not None and c > 0 and c <= 0x7f:
 			if length == max_length:
 				break
 			length += 1
@@ -4605,7 +4623,9 @@ class BinaryView(object):
 			raise AttributeError("Source must be a string")
 		result = core.BNQualifiedNameAndType()
 		errors = ctypes.c_char_p()
-		if not core.BNParseTypeString(self.handle, text, result, errors):
+		type_list = core.BNQualifiedNameList()
+		type_list.count = 0
+		if not core.BNParseTypeString(self.handle, text, result, errors, type_list):
 			error_str = errors.value.decode("utf-8")
 			core.BNFreeString(ctypes.cast(errors, ctypes.POINTER(ctypes.c_byte)))
 			raise SyntaxError(error_str)
@@ -4635,7 +4655,9 @@ class BinaryView(object):
 
 		parse = core.BNTypeParserResult()
 		errors = ctypes.c_char_p()
-		if not core.BNParseTypesString(self.handle, text, parse, errors):
+		type_list = core.BNQualifiedNameList()
+		type_list.count = 0
+		if not core.BNParseTypesString(self.handle, text, parse, errors, type_list):
 			error_str = errors.value.decode("utf-8")
 			core.BNFreeString(ctypes.cast(errors, ctypes.POINTER(ctypes.c_byte)))
 			raise SyntaxError(error_str)
@@ -4654,6 +4676,50 @@ class BinaryView(object):
 			functions[name] = types.Type(core.BNNewTypeReference(parse.functions[i].type), platform = self.platform)
 		core.BNFreeTypeParserResult(parse)
 		return types.TypeParserResult(type_dict, variables, functions)
+
+	def parse_possiblevalueset(self, value, state, here=0):
+		r"""
+		Evaluates a string representation of a PossibleValueSet into an instance of the ``PossibleValueSet`` value.
+
+		.. note:: Values are evaluated based on the rules as specified for :py:meth:`parse_expression` API. This implies that a ``ConstantValue [0x4000].d`` can be provided given that 4 bytes can be read at ``0x4000``. All constants are considered to be in hexadecimal form by default.
+
+		The parser uses the following rules:
+			- ConstantValue - ``<value>``
+			- ConstantPointerValue - ``<value>``
+			- StackFrameOffset - ``<value>``
+			- SignedRangeValue - ``<value>:<value>:<value>{,<value>:<value>:<value>}*`` (Multiple ValueRanges can be provided by separating them by commas)
+			- UnsignedRangeValue - ``<value>:<value>:<value>{,<value>:<value>:<value>}*`` (Multiple ValueRanges can be provided by separating them by commas)
+			- InSetOfValues - ``<value>{,<value>}*``
+			- NotInSetOfValues - ``<value>{,<value>}*``
+
+		:param str value: PossibleValueSet value to be parsed
+		:param RegisterValueType state: State for which the value is to be parsed
+		:param int here: (optional) Base address for relative expressions, defaults to zero
+		:rtype: PossibleValueSet
+		:Example:
+
+			>>> psv_c = bv.parse_possiblevalueset("400", RegisterValueType.ConstantValue)
+			>>> psv_c
+			<const 0x400>
+			>>> psv_ur = bv.parse_possiblevalueset("1:10:1", RegisterValueType.UnsignedRangeValue)
+			>>> psv_ur
+			<unsigned ranges: [<range: 0x1 to 0x10>]>
+			>>> psv_is = bv.parse_possiblevalueset("1,2,3", RegisterValueType.InSetOfValues)
+			>>> psv_is
+			<in set([0x1, 0x2, 0x3])>
+			>>>
+		"""
+		result = core.BNPossibleValueSet();
+		errors = ctypes.c_char_p();
+		if not core.BNParsePossibleValueSet(self.handle, value, state, result, here, errors):
+			if errors:
+				error_str = errors.value.decode("utf-8")
+			else:
+				error_str = "Error parsing specified PossibleValueSet"
+			core.BNFreePossibleValueSet(result)
+			core.BNFreeString(ctypes.cast(errors, ctypes.POINTER(ctypes.c_byte)))
+			raise ValueError(error_str)
+		return function.PossibleValueSet(self.arch, result)
 
 	def get_type_by_name(self, name):
 		"""

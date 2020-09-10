@@ -24,7 +24,6 @@ The previous tools are used in the generation of our documentation, but are not 
 
 * Core
     - [discount] ([discount license] - BSD)
-    - [libgit2] ([libgit2 license] - GPLv2 with linking exception)
     - [libmspack] ([libmspack license] - LGPL, v2)
     - [llvm] ([llvm license] - BSD-style)
     - [lzf] ([lzf license] - BSD)
@@ -33,6 +32,9 @@ The previous tools are used in the generation of our documentation, but are not 
     - [zlib] ([zlib license] - zlib license)
     - [rapidjson] ([rapidjson license] - MIT)
     - [jemalloc] ([jemalloc license] - 2-clause BSD)
+    - [Rust] ([Rust license] - MIT)
+    - [curl-rust] ([curl-rust license] - MIT)
+    - [curl] ([curl license] - MIT)
 
 * Other
     - [yasm] ([yasm license] - 2-clause BSD) used for assembling x86 and x64
@@ -75,8 +77,6 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [doxygen]: http://www.stack.nl/~dimitri/doxygen/
 [flatbuffer]: https://github.com/google/flatbuffers
 [flatbuffer license]: https://github.com/google/flatbuffers/blob/master/LICENSE.txt
-[libgit2]: https://libgit2.github.com/
-[libgit2 license]: https://github.com/libgit2/libgit2/blob/master/COPYING
 [libmspack]: https://www.cabextract.org.uk/libmspack/
 [libmspack license]: https://www.cabextract.org.uk/libmspack/#license
 [llvm]: http://llvm.org/releases/3.8.1/
@@ -116,3 +116,9 @@ Please note that we offer no support for running Binary Ninja with modified Qt l
 [jemalloc license]: https://github.com/jemalloc/jemalloc/blob/master/COPYING
 [libxcb]: https://gitlab.freedesktop.org/xorg/lib/libxcb
 [libxcb license]: https://gitlab.freedesktop.org/xorg/lib/libxcb/-/blob/master/COPYING
+[Rust license]: https://github.com/rust-lang/rust/blob/master/LICENSE-MIT
+[Rust]: https://www.rust-lang.org/
+[curl-rust license]: https://github.com/alexcrichton/curl-rust/blob/master/LICENSE
+[curl-rust]: https://github.com/alexcrichton/curl-rust
+[curl license]: https://github.com/curl/curl/blob/master/COPYING
+[curl]: https://github.com/curl/curl
