@@ -19,6 +19,7 @@
 
 class View;
 class UIContext;
+struct LinearViewCursorPosition;
 
 struct BINARYNINJAUIAPI HighlightTokenState
 {
@@ -31,6 +32,7 @@ struct BINARYNINJAUIAPI HighlightTokenState
 	uint64_t addr;
 	BinaryNinja::Variable localVar;
 	size_t tokenIndex;
+	size_t characterIndex;
 
 	HighlightTokenState();
 };
@@ -49,6 +51,7 @@ struct BINARYNINJAUIAPI UIActionContext
 	FunctionRef function;
 	LowLevelILFunctionRef lowLevelILFunction;
 	MediumLevelILFunctionRef mediumLevelILFunction;
+	LinearViewCursorPosition* cursorPosition;
 
 	UIActionContext();
 	UIActionContext(const BinaryNinja::PluginCommandContext& pluginContext);

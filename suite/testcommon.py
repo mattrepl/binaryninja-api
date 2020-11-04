@@ -59,7 +59,6 @@ def fixStrRepr(string):
     # Python 2 and Python 3 represent Unicode character reprs differently
     return string.replace(b"\xe2\x80\xa6".decode("utf8"), "\\xe2\\x80\\xa6")
 
-
 def get_file_list(test_store_rel):
     test_store = os.path.join(os.path.dirname(__file__), test_store_rel)
     all_files = []
@@ -453,6 +452,22 @@ class TestBuilder(Builder):
         """BinaryViewType list doesnt match"""
         return ["BinaryViewType: " + x.name for x in binja.BinaryViewType.list]
 
+    def test_deprecated_BinaryViewType(self):
+        """deprecated BinaryViewType list doesnt match"""
+        file_name = os.path.join(os.path.dirname(__file__), self.test_store, "..", "fat_macho_9arch.bndb")
+        if not os.path.exists(file_name):
+            return [""]
+
+        with binja.filemetadata.FileMetadata().open_existing_database(file_name, None) as bv:
+            view_types = []
+            for view_type in bv.available_view_types:
+                if view_type.is_deprecated:
+                    view_types.append('BinaryViewType: %s (deprecated)' % view_type.name)
+                else:
+                    view_types.append('BinaryViewType: %s' % view_type.name)
+
+            return view_types
+
     def test_Architecture_list(self):
         """Architecture list doesnt match"""
         return ["Arch name: " + x.name for x in binja.Architecture.list]
@@ -544,7 +559,7 @@ class TestBuilder(Builder):
             return [""]
 
         retinfo = []
-        file_name = os.path.join(self.test_store, "..", "pwnadventurez.nes")
+        file_name = os.path.join(os.path.dirname(__file__), self.test_store, "..", "pwnadventurez.nes")
         bv = binja.BinaryViewType["NES Bank 0"].open(file_name)
 
         for i in bv.platform.arch.calling_conventions:
@@ -574,6 +589,98 @@ class TestBuilder(Builder):
         inttype = binja.Type.int(4)
         testfunction = binja.Type.function(inttype, [inttype, inttype, inttype])
         return ["Test_function params: " + str(testfunction.parameters), "Test_function pointer: " + str(testfunction.pointer(binja.Architecture["x86"], testfunction))]
+
+    def test_Simplifier(self):
+        """Template Simplification"""
+        result = [binja.demangle.simplify_name_to_string(s) for s in [
+            # Minimal exhaustive examples of simplifier (these are replicated in testcommon)
+            "std::basic_string<T, std::char_traits<T>, std::allocator<T> >",
+            "std::vector<T, std::allocator<T> >",
+            "std::vector<T, std::allocator<T>, std::lessthan<T> >",
+            "std::deque<T, std::allocator<T> >",
+            "std::forward_list<T, std::allocator<T> >",
+            "std::list<T, std::allocator<T> >",
+            "std::stack<T, std::deque<T> >",
+            "std::queue<T, std::deque<T> >",
+            "std::set<T, std::less<T>, std::allocator<T> >",
+            "std::multiset<T, std::less<T>, std::allocator<T> >",
+            "std::map<T1, T2, std::less<T1>, std::allocator<std::pair<const T1, T2> > >",
+            "std::multimap<T1, T2, std::less<T1>, std::allocator<std::pair<const T1, T2> > >",
+            "std::unordered_set<T, std::hash<T>, std::equal_to<T>, std::allocator<T> >",
+            "std::unordered_multiset<T, std::hash<T>, std::equal_to<T>, std::allocator<T> >",
+            "std::unordered_map<T1, T2, std::hash<T1>, std::equal_to<T1>, std::allocator<std::pair<const T1, T2> > >",
+            "std::unordered_multimap<T1, T2, std::hash<T1>, std::equal_to<T1>, std::allocator<std::pair<const T1, T2> > >",
+
+            "std::basic_stringbuf<char, std::char_traits<char>, std::allocator<char> >",
+            "std::basic_istringstream<char, std::char_traits<char>, std::allocator<char> >",
+            "std::basic_ostringstream<char, std::char_traits<char>, std::allocator<char> >",
+            "std::basic_stringstream<char, std::char_traits<char>, std::allocator<char> >",
+            "std::basic_stringbuf<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t> >",
+            "std::basic_istringstream<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t> >",
+            "std::basic_ostringstream<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t> >",
+            "std::basic_stringstream<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t> >",
+            "std::basic_stringbuf<T, std::char_traits<T>, std::allocator<T> >",
+            "std::basic_istringstream<T, std::char_traits<T>, std::allocator<T> >",
+            "std::basic_ostringstream<T, std::char_traits<T>, std::allocator<T> >",
+            "std::basic_stringstream<T, std::char_traits<T>, std::allocator<T> >",
+
+            "std::basic_ios<char, std::char_traits<char> >",
+            "std::basic_streambuf<char, std::char_traits<char> >",
+            "std::basic_istream<char, std::char_traits<char> >",
+            "std::basic_ostream<char, std::char_traits<char> >",
+            "std::basic_iostream<char, std::char_traits<char> >",
+            "std::basic_filebuf<char, std::char_traits<char> >",
+            "std::basic_ifstream<char, std::char_traits<char> >",
+            "std::basic_ofstream<char, std::char_traits<char> >",
+            "std::basic_fstream<char, std::char_traits<char> >",
+            "std::basic_ios<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_streambuf<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_istream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_ostream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_iostream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_filebuf<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_ifstream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_ofstream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_fstream<wchar_t, std::char_traits<wchar_t> >",
+            "std::basic_ios<T, std::char_traits<T> >",
+            "std::basic_streambuf<T, std::char_traits<T> >",
+            "std::basic_istream<T, std::char_traits<T> >",
+            "std::basic_ostream<T, std::char_traits<T> >",
+            "std::basic_iostream<T, std::char_traits<T> >",
+            "std::basic_filebuf<T, std::char_traits<T> >",
+            "std::basic_ifstream<T, std::char_traits<T> >",
+            "std::basic_ofstream<T, std::char_traits<T> >",
+            "std::basic_fstream<T, std::char_traits<T> >",
+
+            "std::fpos<__mbstate_t>",
+            "std::_Ios_Iostate",
+            "std::_Ios_Seekdir",
+            "std::_Ios_Openmode",
+            "std::_Ios_Fmtflags",
+
+            "std::foo<T, std::char_traits<T> >",
+            "std::bar<T, std::char_traits<T> >::bar",
+            "std::foo<T, std::char_traits<T> >::~foo",
+            "std::foo<T, std::char_traits<T> >::bar",
+
+            # More complex examples:
+            "AddRequiredUIPluginDependency(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+            "std::vector<std::vector<BinaryNinja::InstructionTextToken, std::allocator<BinaryNinja::InstructionTextToken> >, std::allocator<std::vector<BinaryNinja::InstructionTextToken, std::allocator<BinaryNinja::InstructionTextToken> > > >::_M_check_len(uint64_t, char const*) const",
+            "std::vector<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::array<uint32_t, 5ul> >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::array<uint32_t, 5ul> > > >::_M_default_append(uint64_t)",
+            "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string",
+            "std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::~basic_string",
+        ]]
+
+        # Test all the APIs
+        qName = binja.types.QualifiedName(["std", "__cxx11", "basic_string<T, std::char_traits<T>, std::allocator<T> >"])
+        result.append(binja.demangle.simplify_name_to_string(qName))
+        result.append(str(binja.demangle.simplify_name_to_qualified_name(qName)))
+        result.append(str(binja.demangle.simplify_name_to_qualified_name(str(qName))))
+        result.append(str(binja.demangle.simplify_name_to_qualified_name(str(qName), False).name))
+        result.append("::".join(binja.demangle_gnu3(binja.Architecture['x86_64'], "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERmm", False)[1]))
+        result.append("::".join(binja.demangle_gnu3(binja.Architecture['x86_64'], "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERmm", True)[1]))
+
+        return result
 
     def test_Struct(self):
         """Struct produced different result"""
@@ -889,7 +996,7 @@ class VerifyBuilder(Builder):
         try:
             with binja.open_view(file_name) as bv:
                 # ConstantValue
-                lhs = bv.parse_possiblevalueset("0", binja.RegisterValueType.ConstantValue) 
+                lhs = bv.parse_possiblevalueset("0", binja.RegisterValueType.ConstantValue)
                 rhs = binja.PossibleValueSet.constant(0)
                 assert lhs == rhs
                 lhs = bv.parse_possiblevalueset("$here + 2", binja.RegisterValueType.ConstantValue, 0x2000)
@@ -1016,6 +1123,7 @@ class VerifyBuilder(Builder):
             bv.begin_undo_actions()
             bv.create_user_function(bv.start)
             bv.commit_undo_actions()
+            bv.update_analysis_and_wait()
 
             bv.create_database(temp_name)
             bv.file.close()
@@ -1154,14 +1262,7 @@ class VerifyBuilder(Builder):
             assert([str(functions == bndb_functions and comments == bndb_comments)])
             bv.file.close()
             del bv
-            for i in range(5):
-                try:
-                    time.sleep(1)
-                    os.unlink(temp_name)
-                    break
-                except OSError:
-                    print("Failed to remove file {}".format(temp_name))
-                    continue
+            os.unlink(temp_name)
 
             # test with overridden arch preference
             binja.Settings().set_string_list("files.universal.architecturePreference", ["arm64"])
@@ -1230,14 +1331,7 @@ class VerifyBuilder(Builder):
             assert([str(functions == bndb_functions and comments == bndb_comments)])
             bv.file.close()
             del bv
-            for i in range(5):
-                try:
-                    time.sleep(1)
-                    os.unlink(temp_name)
-                    break
-                except OSError:
-                    print("Failed to remove file {}".format(temp_name))
-                    continue
+            os.unlink(temp_name)
 
             binja.Settings().set_string_list("files.universal.architecturePreference", ["x86_64", "arm64"])
             bv = binja.BinaryViewType.get_view_of_file_with_options(file_name, options={'loader.imageBase': 0xfffffff0000})
@@ -1355,15 +1449,9 @@ class VerifyBuilder(Builder):
                         found = True
                 assert(found)
 
-            for i in range(5):
-                try:
-                    time.sleep(1)
-                    os.unlink(temp_name)
-                    break
-                except OSError:
-                    print("Failed to remove file {}".format(temp_name))
-                    continue
+            os.unlink(temp_name)
             return True
+
         finally:
             self.delete_package("helloworld")
 
@@ -1404,15 +1492,9 @@ class VerifyBuilder(Builder):
 
                     assert(def_ins.get_possible_reg_values_after('r3') == value)
 
-                for i in range(5):
-                    try:
-                        time.sleep(1)
-                        os.unlink(temp_name)
-                        break
-                    except OSError:
-                        print("Failed to remove file {}".format(temp_name))
-                        continue
+                os.unlink(temp_name)
                 return True
+
             finally:
                 self.delete_package("helloworld")
 

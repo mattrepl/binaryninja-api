@@ -2284,6 +2284,11 @@ Ref<Tag> BinaryView::CreateUserDataTag(uint64_t addr, Ref<TagType> tagType, cons
 	return tag;
 }
 
+bool BinaryView::CanAssemble(Architecture* arch)
+{
+	return BNCanAssemble(m_object, arch->GetObject());
+
+}
 
 bool BinaryView::IsNeverBranchPatchAvailable(Architecture* arch, uint64_t addr)
 {
@@ -2449,7 +2454,7 @@ uint64_t BinaryView::GetPreviousDataVariableStartBeforeAddress(uint64_t addr)
 bool BinaryView::ParsePossibleValueSet(const string& value, BNRegisterValueType state, PossibleValueSet& result, uint64_t here, string& errors)
 {
 	BNPossibleValueSet res;
-	char* errorStr;
+	char* errorStr = nullptr;
 
 	if (!BNParsePossibleValueSet(m_object, value.c_str(), state, &res, here, &errorStr))
 	{
@@ -3043,7 +3048,7 @@ Ref<Settings> BinaryView::GetLoadSettings(const string& typeName)
 
 void BinaryView::SetLoadSettings(const string& typeName, Ref<Settings> settings)
 {
-	BNBinaryViewSetLoadSettings(m_object, typeName.c_str(), settings->GetObject());
+	BNBinaryViewSetLoadSettings(m_object, typeName.c_str(), settings ? settings->GetObject() : nullptr);
 }
 
 

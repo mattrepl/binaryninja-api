@@ -203,11 +203,10 @@ namespace BinaryNinja
 		{
 #ifdef BINARYNINJACORE_LIBRARY
 			MediumLevelILFunction* function;
-			const BNMediumLevelILInstruction* instr;
 #else
 			Ref<MediumLevelILFunction> function;
-			BNMediumLevelILInstruction instr;
 #endif
+			BNMediumLevelILInstruction instr;
 			size_t operand, count;
 
 			bool operator==(const ListIterator& a) const;
@@ -444,6 +443,8 @@ namespace BinaryNinja
 
 		size_t GetLowLevelILInstructionIndex() const;
 		size_t GetLowLevelILExprIndex() const;
+		size_t GetHighLevelILInstructionIndex() const;
+		size_t GetHighLevelILExprIndex() const;
 
 		bool HasLowLevelIL() const;
 		LowLevelILInstruction GetLowLevelIL() const;

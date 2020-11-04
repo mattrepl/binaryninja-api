@@ -61,12 +61,14 @@ class ILRegister(object):
 		return self._name
 
 	def __eq__(self, other):
-		if not isinstance(other, self.__class__):
+		if isinstance(other, str) and other in self._arch.regs:
+			other = binaryninja.lowlevelil.ILRegister(self._arch, self._arch.regs[other].index)
+		elif not isinstance(other, self.__class__):
 			return NotImplemented
 		return (self._arch, self._index, self._name) == (other._arch, other._index, other._name)
 
 	def __ne__(self, other):
-		if not isinstance(other, self.__class__):
+		if not isinstance(other, (self.__class__, str)):
 			return NotImplemented
 		return not (self == other)
 
@@ -1024,6 +1026,17 @@ class LowLevelILInstruction(object):
 	@property
 	def mmlil(self):
 		return self.mapped_medium_level_il
+
+	@property
+	def high_level_il(self):
+		"""Gets the high level IL expression corresponding to this expression (may be None for eliminated instructions)"""
+		if self.mlil is None:
+			return None
+		return self.mlil.hlil
+
+	@property
+	def hlil(self):
+		return self.high_level_il
 
 	@property
 	def value(self):
@@ -2998,6 +3011,24 @@ class LowLevelILFunction(object):
 		if result >= core.BNGetMediumLevelILExprCount(med_il.handle):
 			return None
 		return result
+
+	def get_high_level_il_instruction_index(self, instr):
+		med_il = self.medium_level_il
+		if med_il is None:
+			return None
+		mlil_instr = self.get_medium_level_il_instruction_index(instr)
+		if mlil_instr is None:
+			return None
+		return med_il.get_high_level_il_instruction_index(mlil_instr)
+
+	def get_high_level_il_expr_index(self, expr):
+		med_il = self.medium_level_il
+		if med_il is None:
+			return None
+		mlil_expr = self.get_medium_level_il_expr_index(expr)
+		if mlil_expr is None:
+			return None
+		return med_il.get_high_level_il_expr_index(mlil_expr)
 
 	def create_graph(self, settings = None):
 		if settings is not None:

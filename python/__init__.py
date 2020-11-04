@@ -85,7 +85,7 @@ def get_install_directory():
 	"""
 	``get_install_directory`` returns a string pointing to the installed binary currently running
 
-	..warning:: ONLY for use within the Binary Ninja UI, behavior is undefined and unreliable if run headlessly
+	.. warning:: ONLY for use within the Binary Ninja UI, behavior is undefined and unreliable if run headlessly
 	"""
 	return core.BNGetInstallDirectory()
 
@@ -157,15 +157,20 @@ class _DestructionCallbackHandler(object):
 		Function._unregister(func)
 
 
+_enable_default_log = True
 _plugin_init = False
 
 
 def _init_plugins():
+	global _enable_default_log
 	global _plugin_init
 	if not _plugin_init:
-		core.BNInitCorePlugins()
-		if not os.environ.get('BN_DISABLE_USER_PLUGINS'):
-			core.BNInitUserPlugins()
+		# The first call to BNInitCorePlugins returns True for successful initialization and True in this context indicates headless operation.
+		is_headless = not core.BNIsUIEnabled()
+		min_level = Settings().get_string("python.log.minLevel")
+		if _enable_default_log and is_headless and min_level in LogLevel.__members__ and not core_ui_enabled() and sys.stderr.isatty():
+			log_to_stderr(LogLevel[min_level])
+		core.BNInitPlugins(not os.environ.get('BN_DISABLE_USER_PLUGINS'))
 		core.BNInitRepoPlugins()
 	if core.BNIsLicenseValidated():
 		_plugin_init = True
@@ -174,6 +179,13 @@ def _init_plugins():
 
 
 _destruct_callbacks = _DestructionCallbackHandler()
+
+
+def disable_default_log():
+	'''Disable default logging in headless mode for the current session. By default, logging in headless operation is controlled by the 'python.log.minLevel' settings.'''
+	global _enable_default_log
+	_enable_default_log = False
+	close_logs()
 
 def bundled_plugin_path():
 	"""
@@ -242,7 +254,20 @@ def core_ui_enabled():
 
 
 def core_set_license(licenseData):
-	'''Set the Binary Ninja license data, an alternative to storing a ``license.dat`` file'''
+	'''
+		``core_set_license`` is used to initialize the core with a license file that doesn't necessarily reside on a file system. This is especially useful for headless environments such as docker where loading the license file via an environment variable allows for greater security of the license file itself.
+
+		:param str licenseData: string containing the full contents of a license file
+		:return:  user plugin path
+		:rtype: None
+		:Example:
+
+			>>> import os
+			>>> core_set_license(os.environ['BNLICENSE']) #Do this before creating any BinaryViews
+			>>> with open_view("/bin/ls") as bv:
+			...		print(len(bv.functions))
+			128
+	'''
 	core.BNSetLicense(licenseData)
 
 

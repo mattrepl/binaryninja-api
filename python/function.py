@@ -267,7 +267,7 @@ class ValueRange(object):
 		if not isinstance(other, self.__class__):
 			return NotImplemented
 		return self.start == other.start and self.end == other.end and self.step == other.step
-		
+
 	@property
 	def start(self):
 		""" """
@@ -458,7 +458,7 @@ class PossibleValueSet(object):
 			result.valueSet = ctypes.cast(values, ctypes.POINTER(ctypes.c_longlong))
 			result.count = self.count
 		return result
-	
+
 	@property
 	def type(self):
 		""" """
@@ -560,7 +560,7 @@ class PossibleValueSet(object):
 
 	@classmethod
 	def constant(self, value):
-		""" 
+		"""
 		Create a constant valued PossibleValueSet object.
 
 		:param int value: Integer value of the constant
@@ -573,7 +573,7 @@ class PossibleValueSet(object):
 
 	@classmethod
 	def constant_ptr(self, value):
-		""" 
+		"""
 		Create constant pointer valued PossibleValueSet object.
 
 		:param int value: Integer value of the constant pointer
@@ -586,7 +586,7 @@ class PossibleValueSet(object):
 
 	@classmethod
 	def stack_frame_offset(self, offset):
-		""" 
+		"""
 		Create a PossibleValueSet object for a stack frame offset.
 
 		:param int value: Integer value of the offset
@@ -605,7 +605,7 @@ class PossibleValueSet(object):
 		:param list(ValueRange) ranges: List of ValueRanges
 		:rtype: PossibleValueSet
 		:Example:
-			
+
 			>>> v_1 = ValueRange(-5, -1, 1)
 			>>> v_2 = ValueRange(7, 10, 1)
 			>>> val = PossibleValueSet.signed_range_value([v_1, v_2])
@@ -653,7 +653,7 @@ class PossibleValueSet(object):
 		result.count = len(values)
 		return result
 
-	@classmethod 
+	@classmethod
 	def not_in_set_of_values(self, values):
 		"""
 		Create a PossibleValueSet object for a value NOT in a set of values.
@@ -670,7 +670,7 @@ class PossibleValueSet(object):
 	@classmethod
 	def lookup_table_value(self, lookup_table, mapping):
 		"""
-		Create a PossibleValueSet object for a value which is a member of a 
+		Create a PossibleValueSet object for a value which is a member of a
 		lookuptable.
 
 		:param list(LookupTableEntry) lookup_table: List of table entries
@@ -789,35 +789,17 @@ class StackVariableReference(object):
 
 
 class Variable(object):
-	def __init__(self, func, source_type, index, storage, name = None, var_type = None):
+	def __init__(self, func, source_type, index, storage, name = None, var_type = None, identifier = None):
 		self._function = func
-		self._source_type = VariableSourceType(source_type)
+		self._source_type = source_type
 		self._index = index
 		self._storage = storage
-
-		var = core.BNVariable()
-		var.type = source_type
-		var.index = index
-		var.storage = storage
-		self._identifier = core.BNToVariableIdentifier(var)
-
-		if func is not None:
-			if name is None:
-				name = core.BNGetVariableName(func.handle, var)
-			if var_type is None:
-				var_type_conf = core.BNGetVariableType(func.handle, var)
-				if var_type_conf.type:
-					var_type = types.Type(var_type_conf.type, platform = func.platform, confidence = var_type_conf.confidence)
-				else:
-					var_type = None
-
+		self._identifier = identifier
 		self._name = name
 		self._type = var_type
 
 	def __repr__(self):
-		if self._type is None:
-			return "<var %s>" % self.name
-		return "<var %s %s%s>" % (self._type.get_string_before_name(), self.name, self._type.get_string_after_name())
+		return "<var %s %s%s>" % (self.type.get_string_before_name(), self.name, self.type.get_string_after_name())
 
 	def __str__(self):
 		return self.name
@@ -847,6 +829,9 @@ class Variable(object):
 	@property
 	def source_type(self):
 		""":class:`~enums.VariableSourceType`"""
+		if not isinstance(self._source_type, VariableSourceType):
+			self._source_type = VariableSourceType(self._source_type)
+
 		return self._source_type
 
 	@source_type.setter
@@ -874,6 +859,8 @@ class Variable(object):
 	@property
 	def identifier(self):
 		""" """
+		if self._identifier is None:
+			self._identifier = core.BNToVariableIdentifier(self.to_BNVariable())
 		return self._identifier
 
 	@identifier.setter
@@ -883,34 +870,40 @@ class Variable(object):
 	@property
 	def name(self):
 		"""Name of the variable"""
+		if self._name is None:
+			if self._function is not None:
+				self._name = core.BNGetVariableName(self._function.handle, self.to_BNVariable())
 		return self._name
 
 	@name.setter
 	def name(self, value):
-		if self._function is None:
-			self._name = value
-		elif value:
-			self._function.create_user_var(self, self._type, value)
-			self._name = value
-		else:
-			# Name will be reassigned by analysis on the next analysis update
-			# This Variable object is will not be updated
-			self._function.create_user_var(self, self._type, "")
-			self._name = None
+		self._name = value
 
 	@property
 	def type(self):
 		""" """
+		if self._type is None:
+			if self._function is not None:
+				var_type_conf = core.BNGetVariableType(self._function.handle, self.to_BNVariable())
+				if var_type_conf.type:
+					self._type = types.Type(var_type_conf.type, platform = self._function.platform, confidence = var_type_conf.confidence)
 		return self._type
 
 	@type.setter
 	def type(self, value):
 		self._type = value
 
+	def to_BNVariable(self):
+		v = core.BNVariable()
+		v.type = self.source_type
+		v.index = self._index
+		v.storage = self._storage
+		return v
+
 	@classmethod
-	def from_identifier(self, func, identifier, name = None, var_type = None):
+	def from_identifier(self, func, identifier, name=None, var_type=None):
 		var = core.BNFromVariableIdentifier(identifier)
-		return Variable(func, VariableSourceType(var.type), var.index, var.storage, name, var_type)
+		return Variable(func, VariableSourceType(var.type), var.index, var.storage, name, var_type, identifier)
 
 class ConstantReference(object):
 	def __init__(self, val, size, ptr, intermediate):
@@ -1352,7 +1345,7 @@ class Function(object):
 			tags = self.get_address_tags_at(addr, arch)
 			for tag in tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, True)
 		core.BNAddUserAddressTag(self.handle, arch.handle, addr, tag.handle)
@@ -1403,7 +1396,7 @@ class Function(object):
 			tags = self.get_address_tags_at(addr, arch)
 			for tag in tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, False)
 		core.BNAddAutoAddressTag(self.handle, arch.handle, addr, tag.handle)
@@ -1461,7 +1454,7 @@ class Function(object):
 		if unique:
 			for tag in self.function_tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, True)
 		core.BNAddUserFunctionTag(self.handle, tag.handle)
@@ -1499,7 +1492,7 @@ class Function(object):
 		if unique:
 			for tag in self.function_tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, False)
 		core.BNAddAutoFunctionTag(self.handle, tag.handle)
@@ -2446,10 +2439,10 @@ class Function(object):
 		"""
 		``set_auto_instr_highlight`` highlights the instruction at the specified address with the supplied color
 
-		..warning:: Use only in analysis plugins. Do not use in regular plugins, as colors won't be saved to the database.
+		.. warning: Use only in analysis plugins. Do not use in regular plugins, as colors won't be saved to the database.
 
 		:param int addr: virtual address of the instruction to be highlighted
-		:param HighlightStandardColor or highlight.HighlightColor color: Color value to use for highlighting
+		:param HighlightStandardColor|highlight.HighlightColor color: Color value to use for highlighting
 		:param Architecture arch: (optional) Architecture of the instruction if different from self.arch
 		"""
 		if arch is None:
@@ -2465,7 +2458,7 @@ class Function(object):
 		``set_user_instr_highlight`` highlights the instruction at the specified address with the supplied color
 
 		:param int addr: virtual address of the instruction to be highlighted
-		:param HighlightStandardColor or highlight.HighlightColor color: Color value to use for highlighting
+		:param HighlightStandardColor|highlight.HighlightColor color: Color value to use for highlighting
 		:param Architecture arch: (optional) Architecture of the instruction if different from self.arch
 		:Example:
 
@@ -2678,9 +2671,9 @@ class Function(object):
 	def set_user_var_value(self, var, def_addr, value):
 		"""
 		`set_user_var_value` allows the user to specify a PossibleValueSet value for an MLIL variable at its
-		definition site. 
+		definition site.
 
-		..warning:: Setting the variable value, triggers a reanalysis of the function and allows the dataflow
+		.. warning:: Setting the variable value, triggers a reanalysis of the function and allows the dataflow
 		to compute and propagate values which depend on the current variable. This implies that branch conditions
 		whose values can be determined statically will be computed, leading to potential branch elimination at
 		the HLIL layer.
@@ -2741,7 +2734,7 @@ class Function(object):
 
 		var_data = core.BNVariable()
 		var_data.type = var.source_type
-		var_data.index = var.index 
+		var_data.index = var.index
 		var_data.storage = var.storage
 		core.BNClearUserVariableValue(self.handle, var_data, def_site)
 
@@ -3258,7 +3251,7 @@ class InstructionTextToken(object):
 	``class InstructionTextToken`` is used to tell the core about the various components in the disassembly views.
 
 	The below table is provided for ducmentation purposes but the complete list of TokenTypes is available at: :class:`!enums.InstructionTextTokenType`. Note that types marked as `Not emitted by architectures` are not intended to be used by Architectures during lifting. Rather, they are added by the core during analysis or display. UI plugins, however, may make use of them as appropriate.
-	
+
 	Uses of tokens include plugins that parse the output of an architecture (though parsing IL is recommended), or additionally, applying color schemes appropriately.
 
 		========================== ============================================

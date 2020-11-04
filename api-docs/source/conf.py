@@ -43,12 +43,12 @@ def modulelist(modulename):
 def classlist(module):
 	members = inspect.getmembers(module, inspect.isclass)
 	if module.__name__ != "binaryninja.enums":
-		members = sorted(x for x in members if type(x[1]) != binaryninja.enum.EnumMeta)
+		members = sorted(x for x in members if type(x[1]) != binaryninja.enum.EnumMeta and x[1].__module__ != 'builtins')
 	members.extend(inspect.getmembers(module, inspect.isfunction))
 	return (x for x in members if not x[0].startswith("_"))
 
 def setup(app):
-	app.add_stylesheet('css/other.css')
+	app.add_css_file('css/other.css')
 	app.is_parallel_allowed('write')
 
 def generaterst():
@@ -109,18 +109,11 @@ extensions = [
 	'sphinx.ext.autodoc',
 	'sphinx.ext.autosummary',
 	'sphinx.ext.intersphinx',
-	'sphinx.ext.viewcode',
-	'breathe'
+	'sphinx.ext.viewcode'
 ]
 
 autosummary_generate = True
 autodoc_member_order = 'groupwise'
-
-breathe_projects = { "BinaryNinja": "../../xml/" }
-breathe_projects_source = {
-		"BinaryNinja": ("../../", ["binaryninjaapi.h", "binaryninjacore.h"])
-	}
-breathe_default_project = "BinaryNinja"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -139,7 +132,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Binary Ninja API'
+project = u'Binary Ninja Python API'
 copyright = u'2015-2020, Vector 35 Inc'
 author = u'Vector 35 Inc'
 

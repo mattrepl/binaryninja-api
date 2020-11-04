@@ -530,9 +530,27 @@ class HighLevelILInstruction(object):
 		return self.medium_level_il
 
 	@property
+	def low_level_il(self):
+		"""Low level IL form of this expression"""
+		if self.mlil is None:
+			return None
+		return self.mlil.llil
+
+	@property
+	def llil(self):
+		"""Alias for low_level_il"""
+		return self.low_level_il
+
+	@property
 	def il_basic_block(self):
-		"""IL basic block object containing this expression (read-only) (only available on finalized functions)"""
-		return HighLevelILBasicBlock(self._function.source_function.view, core.BNGetHighLevelILBasicBlockForInstruction(self._function.handle, self._instr_index), self._function)
+		"""
+		IL basic block object containing this expression (read-only) (only available on finalized functions).
+		Returns None for HLIL_BLOCK expressions as these can contain multiple basic blocks.
+		"""
+		block = core.BNGetHighLevelILBasicBlockForInstruction(self._function.handle, self._instr_index)
+		if not block:
+			return None
+		return HighLevelILBasicBlock(self._function.source_function.view, block, self._function)
 
 	@property
 	def value(self):

@@ -106,7 +106,7 @@ public:
 
 	virtual void writeData(const BinaryNinja::DataBuffer& data);
 
-	virtual bool canDisplayAs(const UIActionContext& context);
+	virtual bool canDisplayAs(const UIActionContext& context, const BNIntegerDisplayType);
 	virtual void displayAs(const UIActionContext& context, BNIntegerDisplayType type);
 
 	virtual HistoryEntry* getHistoryEntry();
@@ -258,6 +258,8 @@ public:
 	static void registerActions();
 
 	static ViewFrame* viewFrameForWidget(QWidget* widget);
+	static bool lineHasInstructionToken(const BinaryNinja::DisassemblyTextLine& line);
+	static QString getDisassemblyText(const std::vector<BinaryNinja::DisassemblyTextLine>& lines);
 
 public Q_SLOTS:
 	virtual void assemble();

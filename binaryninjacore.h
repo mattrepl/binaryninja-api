@@ -222,7 +222,8 @@ extern "C"
 		SystemCall = 5,
 		IndirectBranch = 6,
 		ExceptionBranch = 7,
-		UnresolvedBranch = 127
+		UnresolvedBranch = 127,
+		UserDefinedBranch = 128
 	};
 
 	enum BNInstructionTextTokenType
@@ -259,6 +260,8 @@ extern "C"
 		CommentToken = 29,
 		PossibleValueToken = 30,
 		PossibleValueTypeToken = 31,
+		ArrayIndexToken = 32,
+		IndentationToken = 33,
 		// The following are output by the analysis system automatically, these should
 		// not be used directly by the architecture plugins
 		CodeSymbolToken = 64,
@@ -955,7 +958,7 @@ extern "C"
 		MLIL_CALL_UNTYPED, // Not valid in SSA form (see MLIL_CALL_UNTYPED_SSA)
 		MLIL_CALL_OUTPUT, // Only valid within MLIL_CALL, MLIL_SYSCALL, MLIL_TAILCALL family instructions
 		MLIL_CALL_PARAM, // Only valid within MLIL_CALL, MLIL_SYSCALL, MLIL_TAILCALL family instructions
-		MLIL_RET, // Not valid in SSA form (see MLIL_RET_SSA)
+		MLIL_RET,
 		MLIL_NORET,
 		MLIL_IF,
 		MLIL_GOTO,
@@ -1480,6 +1483,7 @@ extern "C"
 		BNTypeWithConfidence* (*getIntrinsicOutputs)(void* ctxt, uint32_t intrinsic, size_t* count);
 		void (*freeTypeList)(void* ctxt, BNTypeWithConfidence* types, size_t count);
 
+		bool (*canAssemble)(void* ctxt);
 		bool (*assemble)(void* ctxt, const char* code, uint64_t addr, BNDataBuffer* result, char** errors);
 
 		bool (*isNeverBranchPatchAvailable)(void* ctxt, const uint8_t* data, uint64_t addr, size_t len);
@@ -1508,6 +1512,111 @@ extern "C"
 		float y;
 	};
 
+	enum BNThemeColor
+	{
+		// Hex dump colors
+		AddressColor,
+		ModifiedColor,
+		InsertedColor,
+		NotPresentColor,
+		SelectionColor,
+		OutlineColor,
+		BackgroundHighlightDarkColor,
+		BackgroundHighlightLightColor,
+		BoldBackgroundHighlightDarkColor,
+		BoldBackgroundHighlightLightColor,
+		AlphanumericHighlightColor,
+		PrintableHighlightColor,
+
+		// Graph colors
+		GraphBackgroundDarkColor,
+		GraphBackgroundLightColor,
+		GraphNodeDarkColor,
+		GraphNodeLightColor,
+		GraphNodeOutlineColor,
+		TrueBranchColor,
+		FalseBranchColor,
+		UnconditionalBranchColor,
+		AltTrueBranchColor,
+		AltFalseBranchColor,
+		AltUnconditionalBranchColor,
+
+		// Disassembly colors
+		RegisterColor,
+		NumberColor,
+		CodeSymbolColor,
+		DataSymbolColor,
+		StackVariableColor,
+		ImportColor,
+		InstructionHighlightColor,
+		TokenHighlightColor,
+		TokenSelectionColor,
+		AnnotationColor,
+		OpcodeColor,
+		LinearDisassemblyFunctionHeaderColor,
+		LinearDisassemblyBlockColor,
+		LinearDisassemblyNoteColor,
+		LinearDisassemblySeparatorColor,
+		StringColor,
+		TypeNameColor,
+		FieldNameColor,
+		KeywordColor,
+		UncertainColor,
+		NameSpaceColor,
+		NameSpaceSeparatorColor,
+		GotoLabelColor,
+		CommentColor,
+
+		// Script console colors
+		ScriptConsoleOutputColor,
+		ScriptConsoleErrorColor,
+		ScriptConsoleEchoColor,
+
+		// Highlighting colors
+		BlueStandardHighlightColor,
+		GreenStandardHighlightColor,
+		CyanStandardHighlightColor,
+		RedStandardHighlightColor,
+		MagentaStandardHighlightColor,
+		YellowStandardHighlightColor,
+		OrangeStandardHighlightColor,
+		WhiteStandardHighlightColor,
+		BlackStandardHighlightColor,
+
+		// MiniGraph
+		MiniGraphOverlayColor,
+
+		// FeatureMap
+		FeatureMapBaseColor,
+		FeatureMapNavLineColor,
+		FeatureMapNavHighlightColor,
+		FeatureMapDataVariableColor,
+		FeatureMapAsciiStringColor,
+		FeatureMapUnicodeStringColor,
+		FeatureMapFunctionColor,
+		FeatureMapImportColor,
+		FeatureMapExternColor,
+		FeatureMapLibraryColor
+	};
+
+	// The following edge styles map to QT's Qt::PenStyle enumeration
+	enum BNEdgePenStyle
+	{
+		NoPen = 0,          // no line at all.
+		SolidLine = 1,      // A plain line (default)
+		DashLine = 2,       // Dashes separated by a few pixels.
+		DotLine = 3,        // Dots separated by a few pixels.
+		DashDotLine = 4,    // Alternate dots and dashes.
+		DashDotDotLine = 5, // One dash, two dots, one dash, two dots.
+	};
+
+	struct BNEdgeStyle
+	{
+		BNEdgePenStyle style;
+		size_t width;
+		BNThemeColor color;
+	};
+
 	struct BNFlowGraphEdge
 	{
 		BNBranchType type;
@@ -1515,6 +1624,7 @@ extern "C"
 		BNPoint* points;
 		size_t pointCount;
 		bool backEdge;
+		BNEdgeStyle style;
 	};
 
 	enum BNHighlightColorStyle
@@ -1546,6 +1656,13 @@ extern "C"
 		uint8_t mix, r, g, b, alpha;
 	};
 
+	struct BNDisassemblyTextLineTypeInfo
+	{
+		bool hasTypeInfo;
+		BNType* parentType;
+		size_t fieldIndex;
+	};
+
 	struct BNDisassemblyTextLine
 	{
 		uint64_t addr;
@@ -1555,6 +1672,7 @@ extern "C"
 		BNHighlightColor highlight;
 		BNTag** tags;
 		size_t tagCount;
+		BNDisassemblyTextLineTypeInfo typeInfo;
 	};
 
 	struct BNLinearDisassemblyLine
@@ -1932,6 +2050,24 @@ extern "C"
 		size_t advancedAnalysisCacheSize;
 	};
 
+	struct BNDownloadInstanceResponse
+	{
+		uint16_t statusCode;
+		uint64_t headerCount;
+		char** headerKeys;
+		char** headerValues;
+	};
+
+	struct BNDownloadInstanceInputOutputCallbacks
+	{
+		uint64_t (*readCallback)(uint8_t* data, uint64_t len, void* ctxt);
+		void* readContext;
+		uint64_t (*writeCallback)(uint8_t* data, uint64_t len, void* ctxt);
+		void* writeContext;
+		bool (*progressCallback)(void* ctxt, uint64_t progress, uint64_t total);
+		void* progressContext;
+	};
+
 	struct BNDownloadInstanceOutputCallbacks
 	{
 		uint64_t (*writeCallback)(uint8_t* data, uint64_t len, void* ctxt);
@@ -1945,6 +2081,8 @@ extern "C"
 		void* context;
 		void (*destroyInstance)(void* ctxt);
 		int (*performRequest)(void* ctxt, const char* url);
+		int (*performCustomRequest)(void* ctxt, const char* method, const char* url, uint64_t headerCount, const char* const* headerKeys, const char* const* headerValues, BNDownloadInstanceResponse** response);
+		void (*freeResponse)(void* ctxt, BNDownloadInstanceResponse* response);
 	};
 
 	struct BNDownloadProviderCallbacks
@@ -2310,10 +2448,11 @@ extern "C"
 	BINARYNINJACOREAPI char* BNGetUniqueIdentifierString(void);
 
 	// Plugin initialization
-	BINARYNINJACOREAPI void BNInitCorePlugins(void);
+	BINARYNINJACOREAPI bool BNInitPlugins(bool allowUserPlugins);
+	BINARYNINJACOREAPI bool BNInitCorePlugins(void); // Deprecated, use BNInitPlugins
 	BINARYNINJACOREAPI void BNDisablePlugins(void);
 	BINARYNINJACOREAPI bool BNIsPluginsEnabled(void);
-	BINARYNINJACOREAPI void BNInitUserPlugins(void);
+	BINARYNINJACOREAPI void BNInitUserPlugins(void); // Deprecated, use BNInitPlugins
 	BINARYNINJACOREAPI void BNInitRepoPlugins(void);
 
 	BINARYNINJACOREAPI char* BNGetInstallDirectory(void);
@@ -2367,6 +2506,8 @@ __attribute__ ((format (printf, 1, 2)))
 __attribute__ ((format (printf, 1, 2)))
 #endif
 	BINARYNINJACOREAPI void BNLogAlert(const char* fmt, ...);
+
+	BINARYNINJACOREAPI void BNLogString(BNLogLevel level, const char* str);
 
 	BINARYNINJACOREAPI void BNRegisterLogListener(BNLogListener* listener);
 	BINARYNINJACOREAPI void BNUnregisterLogListener(BNLogListener* listener);
@@ -2479,6 +2620,8 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI bool BNNavigate(BNFileMetadata* file, const char* view, uint64_t offset);
 
 	BINARYNINJACOREAPI BNBinaryView* BNGetFileViewOfType(BNFileMetadata* file, const char* name);
+	
+	BINARYNINJACOREAPI char** BNGetExistingViews(BNFileMetadata* file, size_t* count);
 
 	// Binary view access
 	BINARYNINJACOREAPI BNBinaryView* BNNewViewReference(BNBinaryView* view);
@@ -2542,6 +2685,8 @@ __attribute__ ((format (printf, 1, 2)))
 
 	BINARYNINJACOREAPI void BNRegisterDataNotification(BNBinaryView* view, BNBinaryDataNotification* notify);
 	BINARYNINJACOREAPI void BNUnregisterDataNotification(BNBinaryView* view, BNBinaryDataNotification* notify);
+
+	BINARYNINJACOREAPI bool BNCanAssemble(BNBinaryView* view, BNArchitecture* arch);
 
 	BINARYNINJACOREAPI bool BNIsNeverBranchPatchAvailable(BNBinaryView* view, BNArchitecture* arch, uint64_t addr);
 	BINARYNINJACOREAPI bool BNIsAlwaysBranchPatchAvailable(BNBinaryView* view, BNArchitecture* arch, uint64_t addr);
@@ -2623,6 +2768,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNFreeBinaryViewTypeList(BNBinaryViewType** types);
 	BINARYNINJACOREAPI char* BNGetBinaryViewTypeName(BNBinaryViewType* type);
 	BINARYNINJACOREAPI char* BNGetBinaryViewTypeLongName(BNBinaryViewType* type);
+	BINARYNINJACOREAPI bool BNIsBinaryViewTypeDeprecated(BNBinaryViewType* type);
 	BINARYNINJACOREAPI BNBinaryView* BNCreateBinaryViewOfType(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI BNBinaryView* BNParseBinaryViewOfType(BNBinaryViewType* type, BNBinaryView* data);
 	BINARYNINJACOREAPI bool BNIsBinaryViewTypeValidForData(BNBinaryViewType* type, BNBinaryView* data);
@@ -2790,6 +2936,7 @@ __attribute__ ((format (printf, 1, 2)))
 		size_t* count);
 	BINARYNINJACOREAPI void BNFreeOutputTypeList(BNTypeWithConfidence* types, size_t count);
 
+	BINARYNINJACOREAPI bool BNCanArchitectureAssemble(BNArchitecture* arch);
 	BINARYNINJACOREAPI bool BNAssemble(BNArchitecture* arch, const char* code, uint64_t addr, BNDataBuffer* result, char** errors);
 
 	BINARYNINJACOREAPI bool BNIsArchitectureNeverBranchPatchAvailable(BNArchitecture* arch, const uint8_t* data,
@@ -3007,7 +3154,8 @@ __attribute__ ((format (printf, 1, 2)))
 		BNDisassemblySettings* settings, size_t* count);
 	BINARYNINJACOREAPI void BNFreeDisassemblyTextLines(BNDisassemblyTextLine* lines, size_t count);
 
-	BINARYNINJACOREAPI char* BNGetDisplayStringForInteger(BNBinaryView* binaryView, BNIntegerDisplayType type, uint64_t value, size_t inputWidth);
+	BINARYNINJACOREAPI char* BNGetDisplayStringForInteger(BNBinaryView* binaryView, BNIntegerDisplayType type,
+		uint64_t value, size_t inputWidth, bool isSigned);
 	BINARYNINJACOREAPI BNDisassemblyTextRenderer* BNCreateDisassemblyTextRenderer(BNFunction* func,
 		BNDisassemblySettings* settings);
 	BINARYNINJACOREAPI BNDisassemblyTextRenderer* BNCreateLowLevelILDisassemblyTextRenderer(BNLowLevelILFunction* func,
@@ -3390,7 +3538,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNClearUserVariableValue(BNFunction* func, const BNVariable* var, const BNArchitectureAndAddress* defSite);
 	BINARYNINJACOREAPI BNUserVariableValue* BNGetAllUserVariableValues(BNFunction *func, size_t* count);
 	BINARYNINJACOREAPI void BNFreeUserVariableValues(BNUserVariableValue* result);
-	BINARYNINJACOREAPI bool BNParsePossibleValueSet(BNBinaryView* view, const char* valueText, BNRegisterValueType state, 
+	BINARYNINJACOREAPI bool BNParsePossibleValueSet(BNBinaryView* view, const char* valueText, BNRegisterValueType state,
 			BNPossibleValueSet* result, uint64_t here, char** errors);
 
 	BINARYNINJACOREAPI void BNRequestFunctionDebugReport(BNFunction* func, const char* name);
@@ -3480,7 +3628,7 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI BNFlowGraphEdge* BNGetFlowGraphNodeOutgoingEdges(BNFlowGraphNode* node, size_t* count);
 	BINARYNINJACOREAPI BNFlowGraphEdge* BNGetFlowGraphNodeIncomingEdges(BNFlowGraphNode* node, size_t* count);
 	BINARYNINJACOREAPI void BNFreeFlowGraphNodeEdgeList(BNFlowGraphEdge* edges, size_t count);
-	BINARYNINJACOREAPI void BNAddFlowGraphNodeOutgoingEdge(BNFlowGraphNode* node, BNBranchType type, BNFlowGraphNode* target);
+	BINARYNINJACOREAPI void BNAddFlowGraphNodeOutgoingEdge(BNFlowGraphNode* node, BNBranchType type, BNFlowGraphNode* target, BNEdgeStyle edgeStyle);
 
 	BINARYNINJACOREAPI BNHighlightColor BNGetFlowGraphNodeHighlight(BNFlowGraphNode* node);
 	BINARYNINJACOREAPI void BNSetFlowGraphNodeHighlight(BNFlowGraphNode* node, BNHighlightColor color);
@@ -3796,6 +3944,10 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI size_t BNGetLowLevelILInstructionIndex(BNMediumLevelILFunction* func, size_t instr);
 	BINARYNINJACOREAPI size_t BNGetLowLevelILExprIndex(BNMediumLevelILFunction* func, size_t expr);
 
+	BINARYNINJACOREAPI BNHighLevelILFunction* BNGetHighLevelILForMediumLevelIL(BNMediumLevelILFunction* func);
+	BINARYNINJACOREAPI size_t BNGetHighLevelILInstructionIndex(BNMediumLevelILFunction* func, size_t instr);
+	BINARYNINJACOREAPI size_t BNGetHighLevelILExprIndex(BNMediumLevelILFunction* func, size_t expr);
+
 	BINARYNINJACOREAPI BNTypeWithConfidence BNGetMediumLevelILExprType(BNMediumLevelILFunction* func, size_t expr);
 
 	// High-level IL
@@ -3976,6 +4128,8 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI BNTypeClass BNGetTypeClass(BNType* type);
 	BINARYNINJACOREAPI uint64_t BNGetTypeWidth(BNType* type);
 	BINARYNINJACOREAPI size_t BNGetTypeAlignment(BNType* type);
+	BINARYNINJACOREAPI BNIntegerDisplayType BNGetIntegerTypeDisplayType(BNType* type);
+	BINARYNINJACOREAPI void BNSetIntegerTypeDisplayType(BNTypeBuilder* type, BNIntegerDisplayType displayType);
 	BINARYNINJACOREAPI BNBoolWithConfidence BNIsTypeSigned(BNType* type);
 	BINARYNINJACOREAPI BNBoolWithConfidence BNIsTypeConst(BNType* type);
 	BINARYNINJACOREAPI BNBoolWithConfidence BNIsTypeVolatile(BNType* type);
@@ -4311,11 +4465,10 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI BNTypeLibrary** BNGetPlatformTypeLibrariesByName(BNPlatform* platform, char* depName, size_t* count);
 
 	//Demangler
-	BINARYNINJACOREAPI bool BNDemangleMS(BNArchitecture* arch,
-	                                     const char* mangledName,
-	                                     BNType** outType,
-	                                     char*** outVarName,
-	                                     size_t* outVarNameElements);
+	BINARYNINJACOREAPI bool BNDemangleMS(BNArchitecture* arch, const char* mangledName, BNType** outType, char*** outVarName,
+		size_t* outVarNameElements, const bool simplify);
+	BINARYNINJACOREAPI bool BNDemangleMSWithOptions(BNArchitecture* arch, const char* mangledName, BNType** outType, char*** outVarName,
+		size_t* outVarNameElements, const BNBinaryView* const view);
 
 	// Download providers
 	BINARYNINJACOREAPI BNDownloadProvider* BNRegisterDownloadProvider(const char* name, BNDownloadProviderCallbacks* callbacks);
@@ -4329,7 +4482,10 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI BNDownloadInstance* BNInitDownloadInstance(BNDownloadProvider* provider, BNDownloadInstanceCallbacks* callbacks);
 	BINARYNINJACOREAPI BNDownloadInstance* BNNewDownloadInstanceReference(BNDownloadInstance* instance);
 	BINARYNINJACOREAPI void BNFreeDownloadInstance(BNDownloadInstance* instance);
+	BINARYNINJACOREAPI void BNFreeDownloadInstanceResponse(BNDownloadInstanceResponse* response);
 	BINARYNINJACOREAPI int BNPerformDownloadRequest(BNDownloadInstance* instance, const char* url, BNDownloadInstanceOutputCallbacks* callbacks);
+	BINARYNINJACOREAPI int BNPerformCustomRequest(BNDownloadInstance* instance, const char* method, const char* url, uint64_t headerCount, const char* const* headerKeys, const char* const* headerValues, BNDownloadInstanceResponse** response, BNDownloadInstanceInputOutputCallbacks* callbacks);
+	BINARYNINJACOREAPI uint64_t BNReadDataForDownloadInstance(BNDownloadInstance* instance, uint8_t* data, uint64_t len);
 	BINARYNINJACOREAPI uint64_t BNWriteDataForDownloadInstance(BNDownloadInstance* instance, uint8_t* data, uint64_t len);
 	BINARYNINJACOREAPI bool BNNotifyProgressForDownloadInstance(BNDownloadInstance* instance, uint64_t progress, uint64_t total);
 	BINARYNINJACOREAPI char* BNGetErrorForDownloadInstance(BNDownloadInstance* instance);
@@ -4454,11 +4610,10 @@ __attribute__ ((format (printf, 1, 2)))
 		const char* title, BNFlowGraph* graph);
 
 	BINARYNINJACOREAPI bool BNIsGNU3MangledString(const char* mangledName);
-	BINARYNINJACOREAPI bool BNDemangleGNU3(BNArchitecture* arch,
-	                                       const char* mangledName,
-	                                       BNType** outType,
-	                                       char*** outVarName,
-	                                       size_t* outVarNameElements);
+	BINARYNINJACOREAPI bool BNDemangleGNU3(BNArchitecture* arch, const char* mangledName, BNType** outType,
+		char*** outVarName, size_t* outVarNameElements, const bool simplify);
+	BINARYNINJACOREAPI bool BNDemangleGNU3WithOptions(BNArchitecture* arch, const char* mangledName, BNType** outType,
+		char*** outVarName, size_t* outVarNameElements, const BNBinaryView* const view);
 	BINARYNINJACOREAPI void BNFreeDemangledName(char*** name, size_t nameElements);
 
 	// Plugin repository APIs
@@ -4720,6 +4875,13 @@ __attribute__ ((format (printf, 1, 2)))
 	BINARYNINJACOREAPI void BNUnregisterObjectRefDebugTrace(const char* typeName, void* trace);
 	BINARYNINJACOREAPI BNMemoryUsageInfo* BNGetMemoryUsageInfo(size_t* count);
 	BINARYNINJACOREAPI void BNFreeMemoryUsageInfo(BNMemoryUsageInfo* info, size_t count);
+
+	BINARYNINJACOREAPI uint32_t BNGetAddressRenderedWidth(uint64_t addr);
+
+	BINARYNINJACOREAPI void BNRustFreeString(const char* const);
+	BINARYNINJACOREAPI void BNRustFreeStringArray(const char** const, uint64_t);
+	BINARYNINJACOREAPI const char** const BNRustSimplifyStrToFQN(const char* const, bool);
+	BINARYNINJACOREAPI const char* const BNRustSimplifyStrToStr(const char* const);
 
 #ifdef __cplusplus
 }

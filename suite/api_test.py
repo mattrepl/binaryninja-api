@@ -108,7 +108,7 @@ class SettingsAPI(unittest.TestCase):
 		assert not settings.set_bool("testGroup.readOnlyBoolSetting", False, scope=SettingsScope.SettingsUserScope), "test_settings_types failed"
 
 		s2 = Settings("test2")
-		assert s2.serialize_schema() is "", "test_settings_types failed"
+		assert s2.serialize_schema() == "", "test_settings_types failed"
 		test_schema = settings.serialize_schema()
 		assert test_schema != "", "test_settings_types failed"
 		assert s2.deserialize_schema(test_schema), "test_settings_types failed"
@@ -163,15 +163,18 @@ class SettingsAPI(unittest.TestCase):
 		assert load_settings.contains("loader.architecture"), "test_load_settings failed"
 		assert load_settings.contains("loader.platform"), "test_load_settings failed"
 		assert load_settings.contains("loader.imageBase"), "test_load_settings failed"
-		assert load_settings.contains("loader.entryPoint"), "test_load_settings failed"
+		assert load_settings.contains("loader.entryPointOffset"), "test_load_settings failed"
 		load_settings.set_string("loader.architecture", 'x86_64')
 		load_settings.set_integer("loader.imageBase", 0x500000)
-		load_settings.set_integer("loader.entryPoint", 0x500000)
+		load_settings.set_integer("loader.entryPointOffset", 0)
 		raw_view.set_load_settings(bvt_name, load_settings)
 		mapped_view = BinaryViewType[bvt_name].create(raw_view)
 		assert mapped_view.view_type == bvt_name, "test_load_settings failed"
 		assert mapped_view.segments[0].start == 0x500000, "test_load_settings failed"
 		assert len(mapped_view) == 4, "test_load_settings failed"
+		assert raw_view.get_load_settings(bvt_name) == load_settings
+		raw_view.set_load_settings(bvt_name, None)
+		assert raw_view.get_load_settings(bvt_name) is None
 
 
 class MetaddataAPI(unittest.TestCase):

@@ -60,6 +60,12 @@ class BINARYNINJAUIAPI FlowGraphWidget: public QAbstractScrollArea, public View,
 		size_t instrIndex;
 		size_t lineIndexForAddress;
 		size_t tokenIndex;
+		size_t characterIndex;
+		// Directly from QMouseEvent, not used in comparator
+		int cursorX;
+		int cursorY;
+
+		bool operator<(const CursorPosition& other) const;
 	};
 
 	BinaryViewRef m_data;
@@ -194,6 +200,7 @@ public:
 	void setGraph(FlowGraphRef graph, uint64_t addr);
 	void setGraph(FlowGraphRef graph, FlowGraphHistoryEntry* entry);
 	void setRelatedGraph(FlowGraphRef graph);
+	void setRelatedGraph(FlowGraphRef graph, uint64_t addr);
 	void updateToGraph(FlowGraphRef graph);
 	virtual void updateFonts() override;
 
@@ -244,6 +251,11 @@ public:
 	QRect getMiniRenderRect() const { return m_miniRenderRect; }
 	void paintMiniGraphAndViewport(QWidget* owner);
 	bool paintMiniGraph(QWidget* owner, QPainter& p);
+
+	void paintNode(QPainter& p, FlowGraphNodeRef& node, int minY, int maxY);
+	void paintHighlight(QPainter& p, const std::vector<BinaryNinja::DisassemblyTextLine>& lines,
+		int nodeX, int nodeWidth, int x, int y, size_t line, int tagIndent);
+	void paintEdge(QPainter& p, const FlowGraphNodeRef& node, const BinaryNinja::FlowGraphEdge& edge);
 
 	void showAddress(uint64_t addr, bool select = false);
 	void showTopNode();
@@ -307,19 +319,6 @@ private Q_SLOTS:
 	void invertBranch();
 	void skipAndReturnZero();
 	void skipAndReturnValue();
-
-	void displayAsDefault();
-	void displayAsBinary();
-	void displayAsSignedOctal();
-	void displayAsUnsignedOctal();
-	void displayAsSignedDecimal();
-	void displayAsUnsignedDecimal();
-	void displayAsSignedHexadecimal();
-	void displayAsUnsignedHexadecimal();
-	void displayAsCharacterConstant();
-	void displayAsPointer();
-	void displayAsFloat();
-	void displayAsDouble();
 
 	void makePtr();
 	void makeString();

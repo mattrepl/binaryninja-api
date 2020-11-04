@@ -26,6 +26,7 @@ import binaryninja.log as log
 from binaryninja.binaryview import BinaryViewType
 import binaryninja.interaction as interaction
 from binaryninja.plugin import PluginCommand
+from binaryninja import Settings
 
 # 2-3 compatibility
 from binaryninja import range

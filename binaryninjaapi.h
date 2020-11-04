@@ -659,8 +659,9 @@ __attribute__ ((format (printf, 1, 2)))
 
 	void DisablePlugins();
 	bool IsPluginsEnabled();
-	void InitCorePlugins();
-	void InitUserPlugins();
+	bool InitPlugins(bool allowUserPlugins = true);
+	void InitCorePlugins(); // Deprecated, use InitPlugins
+	void InitUserPlugins(); // Deprecated, use InitPlugins
 	void InitRepoPlugins();
 
 	std::string GetBundledPluginDirectory();
@@ -699,14 +700,18 @@ __attribute__ ((format (printf, 1, 2)))
 	void SetCurrentPluginLoadOrder(BNPluginLoadOrder order);
 	void AddRequiredPluginDependency(const std::string& name);
 	void AddOptionalPluginDependency(const std::string& name);
-	bool DemangleMS(Architecture* arch,
-		const std::string& mangledName,
-		Type** outType,
-		QualifiedName& outVarName);
-	bool DemangleGNU3(Ref<Architecture> arch,
-		const std::string& mangledName,
-		Type** outType,
-		QualifiedName& outVarName);
+
+	class BinaryView;
+
+	bool DemangleMS(Architecture* arch, const std::string& mangledName, Type** outType,
+		QualifiedName& outVarName, const bool simplify = false);
+	bool DemangleMS(Architecture* arch, const std::string& mangledName, Type** outType,
+		QualifiedName& outVarName, const Ref<BinaryView>& view);
+	bool DemangleGNU3(Ref<Architecture> arch, const std::string& mangledName, Type** outType,
+		QualifiedName& outVarName, const bool simplify = false);
+	bool DemangleGNU3(Ref<Architecture> arch, const std::string& mangledName, Type** outType,
+		QualifiedName& outVarName, const Ref<BinaryView>& view);
+
 	void RegisterMainThread(MainThreadActionHandler* handler);
 	Ref<MainThreadAction> ExecuteOnMainThread(const std::function<void()>& action);
 	void ExecuteOnMainThreadAndWait(const std::function<void()>& action);
@@ -830,8 +835,6 @@ __attribute__ ((format (printf, 1, 2)))
 		virtual bool Navigate(const std::string& view, uint64_t offset) = 0;
 	};
 
-	class BinaryView;
-
 	class User : public CoreRefCountObject<BNUser, BNNewUserReference, BNFreeUser>
 	{
 		private:
@@ -939,6 +942,7 @@ __attribute__ ((format (printf, 1, 2)))
 		bool Navigate(const std::string& view, uint64_t offset);
 
 		BinaryNinja::Ref<BinaryNinja::BinaryView> GetViewOfType(const std::string& name);
+		std::vector<std::string> GetExistingViews() const;
 	};
 
 	class Function;
@@ -1198,6 +1202,13 @@ __attribute__ ((format (printf, 1, 2)))
 
 
 	class Tag;
+	struct DisassemblyTextLineTypeInfo
+	{
+		bool hasTypeInfo;
+		BinaryNinja::Ref<BinaryNinja::Type> parentType;
+		size_t fieldIndex;
+	};
+
 	struct DisassemblyTextLine
 	{
 		uint64_t addr;
@@ -1205,6 +1216,7 @@ __attribute__ ((format (printf, 1, 2)))
 		std::vector<InstructionTextToken> tokens;
 		BNHighlightColor highlight;
 		std::vector<Ref<Tag>> tags;
+		DisassemblyTextLineTypeInfo typeInfo;
 
 		DisassemblyTextLine();
 	};
@@ -1629,6 +1641,8 @@ __attribute__ ((format (printf, 1, 2)))
 		Ref<Tag> CreateAutoDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
 		Ref<Tag> CreateUserDataTag(uint64_t addr, Ref<TagType> tagType, const std::string& data, bool unique = false);
 
+		bool CanAssemble(Architecture* arch);
+
 		bool IsNeverBranchPatchAvailable(Architecture* arch, uint64_t addr);
 		bool IsAlwaysBranchPatchAvailable(Architecture* arch, uint64_t addr);
 		bool IsInvertBranchPatchAvailable(Architecture* arch, uint64_t addr);
@@ -1820,6 +1834,8 @@ __attribute__ ((format (printf, 1, 2)))
 
 		std::string GetName();
 		std::string GetLongName();
+
+		bool IsDeprecated();
 
 		virtual BinaryView* Create(BinaryView* data) = 0;
 		virtual BinaryView* Parse(BinaryView* data) = 0;
@@ -2094,6 +2110,7 @@ __attribute__ ((format (printf, 1, 2)))
 		static BNTypeWithConfidence* GetIntrinsicOutputsCallback(void* ctxt, uint32_t intrinsic, size_t* count);
 		static void FreeTypeListCallback(void* ctxt, BNTypeWithConfidence* types, size_t count);
 
+		static bool CanAssembleCallback(void* ctxt);
 		static bool AssembleCallback(void* ctxt, const char* code, uint64_t addr, BNDataBuffer* result, char** errors);
 		static bool IsNeverBranchPatchAvailableCallback(void* ctxt, const uint8_t* data, uint64_t addr, size_t len);
 		static bool IsAlwaysBranchPatchAvailableCallback(void* ctxt, const uint8_t* data, uint64_t addr, size_t len);
@@ -2184,6 +2201,7 @@ __attribute__ ((format (printf, 1, 2)))
 		virtual std::vector<NameAndType> GetIntrinsicInputs(uint32_t intrinsic);
 		virtual std::vector<Confidence<Ref<Type>>> GetIntrinsicOutputs(uint32_t intrinsic);
 
+		virtual bool CanAssemble();
 		virtual bool Assemble(const std::string& code, uint64_t addr, DataBuffer& result, std::string& errors);
 
 		/*! IsNeverBranchPatchAvailable returns true if the instruction at addr can be patched to never branch.
@@ -2334,6 +2352,7 @@ __attribute__ ((format (printf, 1, 2)))
 		virtual std::vector<NameAndType> GetIntrinsicInputs(uint32_t intrinsic) override;
 		virtual std::vector<Confidence<Ref<Type>>> GetIntrinsicOutputs(uint32_t intrinsic) override;
 
+		virtual bool CanAssemble() override;
 		virtual bool Assemble(const std::string& code, uint64_t addr, DataBuffer& result, std::string& errors) override;
 
 		virtual bool IsNeverBranchPatchAvailable(const uint8_t* data, uint64_t addr, size_t len) override;
@@ -2409,6 +2428,7 @@ __attribute__ ((format (printf, 1, 2)))
 		virtual std::vector<NameAndType> GetIntrinsicInputs(uint32_t intrinsic) override;
 		virtual std::vector<Confidence<Ref<Type>>> GetIntrinsicOutputs(uint32_t intrinsic) override;
 
+		virtual bool CanAssemble() override;
 		virtual bool Assemble(const std::string& code, uint64_t addr, DataBuffer& result, std::string& errors) override;
 
 		virtual bool IsNeverBranchPatchAvailable(const uint8_t* data, uint64_t addr, size_t len) override;
@@ -2499,6 +2519,8 @@ __attribute__ ((format (printf, 1, 2)))
 		Confidence<int64_t> GetStackAdjustment() const;
 		QualifiedName GetStructureName() const;
 		Ref<NamedTypeReference> GetRegisteredName() const;
+
+		BNIntegerDisplayType GetIntegerTypeDisplayType() const;
 
 		uint64_t GetElementCount() const;
 		uint64_t GetOffset() const;
@@ -2597,6 +2619,7 @@ __attribute__ ((format (printf, 1, 2)))
 		Confidence<bool> IsSigned() const;
 		Confidence<bool> IsConst() const;
 		Confidence<bool> IsVolatile() const;
+		void SetIntegerTypeDisplayType(BNIntegerDisplayType displayType);
 
 		Confidence<Ref<Type>> GetChildType() const;
 		Confidence<Ref<CallingConvention>> GetCallingConvention() const;
@@ -3219,6 +3242,7 @@ __attribute__ ((format (printf, 1, 2)))
 		Ref<FlowGraphNode> target;
 		std::vector<BNPoint> points;
 		bool backEdge;
+		BNEdgeStyle style;
 	};
 
 	class FlowGraphNode: public CoreRefCountObject<BNFlowGraphNode,
@@ -3244,7 +3268,7 @@ __attribute__ ((format (printf, 1, 2)))
 		void SetLines(const std::vector<DisassemblyTextLine>& lines);
 		const std::vector<FlowGraphEdge>& GetOutgoingEdges();
 		const std::vector<FlowGraphEdge>& GetIncomingEdges();
-		void AddOutgoingEdge(BNBranchType type, FlowGraphNode* target);
+		void AddOutgoingEdge(BNBranchType type, FlowGraphNode* target, BNEdgeStyle edgeStyle = BNEdgeStyle());
 
 		BNHighlightColor GetHighlight() const;
 		void SetHighlight(const BNHighlightColor& color);
@@ -4062,6 +4086,9 @@ __attribute__ ((format (printf, 1, 2)))
 		Ref<LowLevelILFunction> GetLowLevelIL() const;
 		size_t GetLowLevelILInstructionIndex(size_t instr) const;
 		size_t GetLowLevelILExprIndex(size_t expr) const;
+		Ref<HighLevelILFunction> GetHighLevelIL() const;
+		size_t GetHighLevelILInstructionIndex(size_t instr) const;
+		size_t GetHighLevelILExprIndex(size_t expr) const;
 
 		Confidence<Ref<Type>> GetExprType(size_t expr);
 		Confidence<Ref<Type>> GetExprType(const MediumLevelILInstruction& expr);
@@ -4735,13 +4762,24 @@ __attribute__ ((format (printf, 1, 2)))
 
 		static void DestroyInstanceCallback(void* ctxt);
 		static int PerformRequestCallback(void* ctxt, const char* url);
+		static int PerformCustomRequestCallback(void* ctxt, const char* method, const char* url, uint64_t headerCount, const char* const* headerKeys, const char* const* headerValues, BNDownloadInstanceResponse** response);
+		static void PerformFreeResponse(void* ctxt, BNDownloadInstanceResponse* response);
 
 		virtual void DestroyInstance();
 
 	public:
+		struct Response
+		{
+			uint16_t statusCode;
+			std::unordered_map<std::string, std::string> headers;
+		};
+
 		virtual int PerformRequest(const std::string& url) = 0;
+		virtual int PerformCustomRequest(const std::string& method, const std::string& url, const std::unordered_map<std::string, std::string>& headers, Response& response) = 0;
 
 		int PerformRequest(const std::string& url, BNDownloadInstanceOutputCallbacks* callbacks);
+		int PerformCustomRequest(const std::string& method, const std::string& url, const std::unordered_map<std::string, std::string>& headers, Response& response, BNDownloadInstanceInputOutputCallbacks* callbacks);
+		uint64_t ReadDataCallback(uint8_t* data, uint64_t len);
 		uint64_t WriteDataCallback(uint8_t* data, uint64_t len);
 		bool NotifyProgressCallback(uint64_t progress, uint64_t total);
 		void SetError(const std::string& error);
@@ -4755,6 +4793,7 @@ __attribute__ ((format (printf, 1, 2)))
 		virtual ~CoreDownloadInstance() {};
 
 		virtual int PerformRequest(const std::string& url) override;
+		virtual int PerformCustomRequest(const std::string& method, const std::string& url, const std::unordered_map<std::string, std::string>& headers, DownloadInstance::Response& response) override;
 	};
 
 	class DownloadProvider: public StaticCoreRefCountObject<BNDownloadProvider>
@@ -5277,7 +5316,8 @@ __attribute__ ((format (printf, 1, 2)))
 			bool hasAutoAnnotations,
 			const std::string& leadingSpaces="  ",
 			const std::string& indentSpaces="");
-		static std::string GetDisplayStringForInteger(Ref<BinaryView> binaryView, BNIntegerDisplayType type, uint64_t value, size_t inputWidth);
+		static std::string GetDisplayStringForInteger(Ref<BinaryView> binaryView, BNIntegerDisplayType type,
+			uint64_t value, size_t inputWidth, bool isSigned = true);
 	};
 
 	struct LinearViewObjectIdentifier
@@ -5364,5 +5404,33 @@ __attribute__ ((format (printf, 1, 2)))
 		Ref<LinearViewCursor> Duplicate();
 
 		static int Compare(LinearViewCursor* a, LinearViewCursor* b);
+	};
+
+	class SimplifyName
+	{
+	public:
+		// Use these functions to interface with the simplifier
+		static std::string        to_string(const std::string& input);
+		static std::string        to_string(const QualifiedName& input);
+		static QualifiedName to_qualified_name(const std::string& input, bool simplify);
+		static QualifiedName to_qualified_name(const QualifiedName& input);
+
+		// Below is everything for the above APIs to work
+		enum SimplifierDest
+		{
+			str,
+			fqn
+		};
+
+		SimplifyName(const std::string&, const SimplifierDest, const bool);
+		~SimplifyName();
+
+		operator std::string() const;
+		operator QualifiedName();
+
+	private:
+		const char*  m_rust_string;
+		const char** m_rust_array;
+		uint64_t m_length;
 	};
 }

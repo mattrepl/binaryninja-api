@@ -530,7 +530,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self._view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self._notify.data_var_added(self._view, DataVariable(address, var_type, auto_discovered, view))
+			self._notify.data_var_added(self._view, DataVariable(address, var_type, auto_discovered, self._view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -539,7 +539,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self._view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self._notify.data_var_removed(self._view, DataVariable(address, var_type, auto_discovered, view))
+			self._notify.data_var_removed(self._view, DataVariable(address, var_type, auto_discovered, self._view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -548,7 +548,7 @@ class BinaryDataNotificationCallbacks(object):
 			address = var[0].address
 			var_type = types.Type(core.BNNewTypeReference(var[0].type), platform = self._view.platform, confidence = var[0].typeConfidence)
 			auto_discovered = var[0].autoDiscovered
-			self._notify.data_var_updated(self._view, DataVariable(address, var_type, auto_discovered, view))
+			self._notify.data_var_updated(self._view, DataVariable(address, var_type, auto_discovered, self._view))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -633,14 +633,14 @@ class BinaryDataNotificationCallbacks(object):
 	def _type_defined(self, ctxt, view, name, type_obj):
 		try:
 			qualified_name = types.QualifiedName._from_core_struct(name[0])
-			self._notify.type_defined(view, qualified_name, types.Type(core.BNNewTypeReference(type_obj), platform = self._view.platform))
+			self._notify.type_defined(self._view, qualified_name, types.Type(core.BNNewTypeReference(type_obj), platform = self._view.platform))
 		except:
 			log.log_error(traceback.format_exc())
 
 	def _type_undefined(self, ctxt, view, name, type_obj):
 		try:
 			qualified_name = types.QualifiedName._from_core_struct(name[0])
-			self._notify.type_undefined(view, qualified_name, types.Type(core.BNNewTypeReference(type_obj), platform = self._view.platform))
+			self._notify.type_undefined(self._view, qualified_name, types.Type(core.BNNewTypeReference(type_obj), platform = self._view.platform))
 		except:
 			log.log_error(traceback.format_exc())
 
@@ -731,6 +731,11 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		"""BinaryView long name (read-only)"""
 		return core.BNGetBinaryViewTypeLongName(self.handle)
 
+	@property
+	def is_deprecated(self):
+		"""returns if the BinaryViewType is deprecated (read-only)"""
+		return core.BNIsBinaryViewTypeDeprecated(self.handle)
+
 	def create(self, data):
 		view = core.BNCreateBinaryViewOfType(self.handle, data.handle)
 		if view is None:
@@ -742,7 +747,7 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		``open`` opens an instance of a particular BinaryViewType and returns it, or None if not possible.
 
 		:param str src: path to filename or bndb to open
-		:param FileMetaData file_metadata: Optional parameter for a :py:class:`FileMetaData` object
+		:param FileMetadata file_metadata: Optional parameter for a :py:class:`FileMetadata` object
 		:return: returns a :py:class:`BinaryView` object for the given filename
 		:rtype: :py:class:`BinaryView` or ``None``
 		"""
@@ -755,7 +760,7 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 	@classmethod
 	def get_view_of_file(cls, filename, update_analysis=True, progress_func=None):
 		"""
-		``get_view_of_file`` opens and returns the first available :py:class:`BinaryView`, excluding a Raw :py:class:`BinaryViewType` unless no other view matches
+		``get_view_of_file`` opens and returns the first available :py:class:`BinaryView`, excluding a Raw :py:class:`BinaryViewType` unless no other view is available
 
 		:param str filename: path to filename or bndb to open
 		:param bool update_analysis: whether or not to run :func:`update_analysis_and_wait` after opening a :py:class:`BinaryView`, defaults to ``True``
@@ -764,6 +769,9 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		:rtype: :py:class:`BinaryView` or ``None``
 		"""
 		sqlite = b"SQLite format 3"
+		if not isinstance(filename, str):
+			filename = str(filename)
+
 		isDatabase = filename.endswith(".bndb")
 		if isDatabase:
 			f = open(filename, 'rb')
@@ -803,8 +811,8 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		initialize and returns ``None``.
 
 		.. note:: Calling this method without providing options is not necessarily equivalent to simply calling :func:`get_view_of_file`. This is because \
-		:py:class:`BinaryViewType`s are in control of generating load options, this method allows an alternative default way to open a file. For \
-		example, opening a relocatable object file with :func:`get_view_of_file` sets **'loader.imageBase'** to 0, whereas opening with \
+		a :py:class:`BinaryViewType` is in control of generating load options, this method allows an alternative default way to open a file. For \
+		example, opening a relocatable object file with :func:`get_view_of_file` sets 'loader.imageBase' to `0`, whereas opening with \
 		:func:`get_view_of_file_with_options` sets **'loader.imageBase'** to ``0x400000`` for 64-bit binaries, or ``0x10000`` for 32-bit binaries, by default.
 
 		:param str filename: path to filename or bndb to open
@@ -851,6 +859,9 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 			load_settings = view.get_load_settings(bvt.name)
 		if load_settings is None:
 			load_settings = bvt.get_load_settings_for_data(view)
+		if load_settings is None:
+			log.log_error(f"Could not get load settings for binary view of type `{bvt.name}`")
+			return view
 		load_settings.set_resource_id(bvt.name)
 		view.set_load_settings(bvt.name, load_settings)
 
@@ -870,7 +881,9 @@ class BinaryViewType(with_metaclass(_BinaryViewTypeMetaclass, object)):
 		else:
 			bv = bvt.create(view)
 
-		if bv is not None and update_analysis:
+		if bv is None:
+			return view
+		elif update_analysis:
 			bv.update_analysis_and_wait()
 		return bv
 
@@ -1673,7 +1686,6 @@ class BinaryView(object):
 
 	@property
 	def notifications(self):
-		""":py:class:`FileMetadata` backing the BinaryView """
 		return self._notifications
 
 	@notifications.setter
@@ -1956,7 +1968,7 @@ class BinaryView(object):
 
 	@property
 	def sections(self):
-		"""List of sections (read-only)"""
+		"""Dictionary of sections (read-only)"""
 		count = ctypes.c_ulonglong(0)
 		section_list = core.BNGetSections(self.handle, count)
 		result = {}
@@ -2668,7 +2680,7 @@ class BinaryView(object):
 		``write`` writes the bytes in ``data`` to the virtual address ``addr``.
 
 		:param int addr: virtual address to write to.
-		:param str data: data to be written at addr.
+		:param Union[bytes, bytearray, str] data: data to be written at addr.
 		:return: number of bytes written to virtual address ``addr``
 		:rtype: int
 		:Example:
@@ -2680,11 +2692,8 @@ class BinaryView(object):
 			>>> bv.read(0,4)
 			'AAAA'
 		"""
-		if not isinstance(data, bytes):
-			if isinstance(data, str):
-				buf = databuffer.DataBuffer(data.encode())
-			else:
-				raise TypeError("Must be bytes or str")
+		if not (isinstance(data, bytes) or isinstance(data, bytearray) or isinstance(data, str)):
+			raise TypeError("Must be bytes, bytearray, or str")
 		else:
 			buf = databuffer.DataBuffer(data)
 		return core.BNWriteViewBuffer(self.handle, addr, buf.handle)
@@ -2694,7 +2703,7 @@ class BinaryView(object):
 		``insert`` inserts the bytes in ``data`` to the virtual address ``addr``.
 
 		:param int addr: virtual address to write to.
-		:param str data: data to be inserted at addr.
+		:param Union[bytes, bytearray, str] data: data to be inserted at addr.
 		:return: number of bytes inserted to virtual address ``addr``
 		:rtype: int
 		:Example:
@@ -2704,9 +2713,10 @@ class BinaryView(object):
 			>>> bv.read(0,8)
 			'BBBBAAAA'
 		"""
-		if not isinstance(data, bytes):
-			raise TypeError("Must be bytes")
-		buf = databuffer.DataBuffer(data)
+		if not (isinstance(data, bytes) or isinstance(data, bytearray) or isinstance(data, str)):
+			raise TypeError("Must be bytes, bytearray, or str")
+		else:
+			buf = databuffer.DataBuffer(data)
 		return core.BNInsertViewBuffer(self.handle, addr, buf.handle)
 
 	def remove(self, addr, length):
@@ -2812,7 +2822,7 @@ class BinaryView(object):
 		``is_offset_code_semantics`` checks if an virtual address ``addr`` is semantically valid for code.
 
 		:param int addr: a virtual address to be checked
-		:return: true if the virtual address is valid for writing, false if the virtual address is invalid or error
+		:return: true if the virtual address is valid for code semantics, false if the virtual address is invalid or error
 		:rtype: bool
 		"""
 		return core.BNIsOffsetCodeSemantics(self.handle, addr)
@@ -2822,7 +2832,7 @@ class BinaryView(object):
 		``is_offset_extern_semantics`` checks if an virtual address ``addr`` is semantically valid for external references.
 
 		:param int addr: a virtual address to be checked
-		:return: true if the virtual address is valid for writing, false if the virtual address is invalid or error
+		:return: true if the virtual address is valid for for external references, false if the virtual address is invalid or error
 		:rtype: bool
 		"""
 		return core.BNIsOffsetExternSemantics(self.handle, addr)
@@ -3693,6 +3703,7 @@ class BinaryView(object):
 
 		:param TagType type: The Tag Type for this Tag
 		:param str data: Additional data for the Tag
+		:param bool user
 		:return: The created Tag
 		:rtype: Tag
 		:Example:
@@ -3793,7 +3804,7 @@ class BinaryView(object):
 			tags = self.get_data_tags_at(addr)
 			for tag in tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, True)
 		core.BNAddUserDataTag(self.handle, addr, tag.handle)
@@ -3835,7 +3846,7 @@ class BinaryView(object):
 			tags = self.get_data_tags_at(addr)
 			for tag in tags:
 				if tag.type == type and tag.data == data:
-					return
+					return tag
 
 		tag = self.create_tag(type, data, False)
 		core.BNAddAutoDataTag(self.handle, addr, tag.handle)
@@ -3851,6 +3862,22 @@ class BinaryView(object):
 		:rtype: None
 		"""
 		core.BNRemoveAutoDataTag(self.handle, addr, tag.handle)
+
+	def can_assemble(self, arch=None):
+		"""
+		``can_assemble`` queries the architecture plugin to determine if the architecture can assemble instructions.
+
+		:return: True if the architecture can assemble, False otherwise
+		:rtype: bool
+		:Example:
+
+			>>> bv.can_assemble()
+			True
+			>>>
+		"""
+		if arch is None:
+			arch = self.arch
+		return core.BNCanAssemble(self.handle, arch.handle)
 
 	def is_never_branch_patch_available(self, addr, arch=None):
 		"""
@@ -4342,12 +4369,17 @@ class BinaryView(object):
 			<var 0x1000003c: int32_t>
 			>>>
 		"""
-		next_data_var_start = core.BNGetNextDataVariableStartAfterAddress(self.handle, addr)
-		if next_data_var_start == self.end:
-			return None
-		var = core.BNDataVariable()
-		if not core.BNGetDataVariableAtAddress(self.handle, next_data_var_start, var):
-			return None
+		while True:
+			next_data_var_start = core.BNGetNextDataVariableStartAfterAddress(self.handle, addr)
+			if next_data_var_start == self.end:
+				return None
+			var = core.BNDataVariable()
+			if not core.BNGetDataVariableAtAddress(self.handle, next_data_var_start, var):
+				return None
+			if var.address < next_data_var_start:
+				addr = var.address + core.BNGetTypeWidth(var.type)
+				continue
+			break
 		return DataVariable(var.address, types.Type(var.type, platform = self.platform, confidence = var.typeConfidence), var.autoDiscovered, self)
 
 	def get_next_data_var_start_after(self, addr):
@@ -4678,7 +4710,7 @@ class BinaryView(object):
 		return types.TypeParserResult(type_dict, variables, functions)
 
 	def parse_possiblevalueset(self, value, state, here=0):
-		r"""
+		"""
 		Evaluates a string representation of a PossibleValueSet into an instance of the ``PossibleValueSet`` value.
 
 		.. note:: Values are evaluated based on the rules as specified for :py:meth:`parse_expression` API. This implies that a ``ConstantValue [0x4000].d`` can be provided given that 4 bytes can be read at ``0x4000``. All constants are considered to be in hexadecimal form by default.
@@ -4709,8 +4741,10 @@ class BinaryView(object):
 			<in set([0x1, 0x2, 0x3])>
 			>>>
 		"""
-		result = core.BNPossibleValueSet();
-		errors = ctypes.c_char_p();
+		result = core.BNPossibleValueSet()
+		errors = ctypes.c_char_p()
+		if value == None:
+			value = ''
 		if not core.BNParsePossibleValueSet(self.handle, value, state, result, here, errors):
 			if errors:
 				error_str = errors.value.decode("utf-8")
@@ -5060,7 +5094,7 @@ class BinaryView(object):
 		``find_next_data`` searches for the bytes ``data`` starting at the virtual address ``start`` until the end of the BinaryView.
 
 		:param int start: virtual address to start searching from.
-		:param str data: data to search for
+		:param Union[bytes, bytearray, str] data: data to search for
 		:param FindFlag flags: (optional) defaults to case-insensitive data search
 
 			==================== ============================
@@ -5070,7 +5104,10 @@ class BinaryView(object):
 			FindCaseInsensitive  Case-insensitive search
 			==================== ============================
 		"""
-		buf = databuffer.DataBuffer(str(data))
+		if not (isinstance(data, bytes) or isinstance(data, bytearray) or isinstance(data, str)):
+			raise TypeError("Must be bytes, bytearray, or str")
+		else:
+			buf = databuffer.DataBuffer(data)
 		result = ctypes.c_ulonglong()
 		if not core.BNFindNextData(self.handle, start, buf.handle, result, flags):
 			return None
@@ -5112,6 +5149,7 @@ class BinaryView(object):
 
 		:param int start: virtual address to start searching from.
 		:param int constant: constant to search for
+		:param DisassemblySettings settings: disassembly settings
 		"""
 		if not isinstance(constant, numbers.Integral):
 			raise TypeError("constant parameter is not integral type")
@@ -5455,7 +5493,9 @@ class BinaryView(object):
 		:param Settings settings: the load settings
 		:rtype: None
 		"""
-		core.BNBinaryViewSetLoadSettings(self.handle, type_name, settings.handle)
+		if settings is not None:
+			settings = settings.handle
+		core.BNBinaryViewSetLoadSettings(self.handle, type_name, settings)
 
 	def __setattr__(self, name, value):
 		try:

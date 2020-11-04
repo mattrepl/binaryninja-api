@@ -9,6 +9,8 @@
 #include "menus.h"
 #include "statusbarwidget.h"
 #include "uicontext.h"
+#include "instructionedit.h"
+#include <assembledialog.h>
 
 #define LINEAR_VIEW_UPDATE_CHECK_INTERVAL 200
 #define MAX_STRING_TYPE_LENGTH 1048576
@@ -27,6 +29,10 @@ struct BINARYNINJAUIAPI LinearViewCursorPosition
 	BinaryNinja::Ref<BinaryNinja::LinearViewCursor> cursor;
 	size_t lineIndex;
 	size_t tokenIndex;
+	size_t characterIndex;
+	// Directly from QMouseEvent, not used in comparators
+	int cursorX;
+	int cursorY;
 
 	LinearViewCursorPosition();
 	LinearViewCursorPosition(const LinearViewCursorPosition& pos);
@@ -111,7 +117,8 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	bool m_updatesRequired;
 	bool m_updateBounds;
 
-	LinearViewCursorPosition m_cursorPosition, m_selectionStartPos;
+	LinearViewCursorPosition m_cursorPos, m_selectionStartPos;
+	bool m_cursorAscii;
 	bool m_tokenSelection = false;
 	HighlightTokenState m_highlight;
 	uint64_t m_navByRefTarget;
@@ -120,6 +127,8 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	SettingsRef m_settings;
 	DisassemblySettingsRef m_options;
 	BNFunctionGraphType m_type;
+
+	InstructionEdit* m_instrEdit;
 
 	BinaryNinja::Ref<BinaryNinja::LinearViewCursor> m_topPosition, m_bottomPosition;
 	std::vector<LinearViewLine> m_lines;
@@ -140,7 +149,7 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	bool cachePreviousLines();
 	bool cacheNextLines();
 	void updateCache();
-	void refreshAtCurrentLocation();
+	void refreshAtCurrentLocation(bool cursorFixup = false);
 	bool navigateToAddress(uint64_t addr, bool center, bool updateHighlight, bool navByRef = false);
 	bool navigateToGotoLabel(uint64_t label);
 
@@ -149,6 +158,10 @@ class BINARYNINJAUIAPI LinearView: public QAbstractScrollArea, public View, publ
 	void bindActions();
 	void getHexDumpLineBytes(const BinaryNinja::LinearDisassemblyLine& line, size_t& skippedBytes, size_t& totalBytes,
 		size_t& totalCols);
+
+	void paintHexDumpLine(QPainter& p, const LinearViewLine& line, int xoffset, int y, uint32_t addrLen, int tagOffset);
+	void paintAnalysisWarningLine(QPainter& p, const LinearViewLine& line, int xoffset, int y);
+	void paintTokenLine(QPainter& p, const LinearViewLine& line, int xoffset, int y, QRect eventRect, int tagOffset);
 
 	void setSectionSemantics(const std::string& name, BNSectionSemantics semantics);
 
@@ -192,6 +205,7 @@ private Q_SLOTS:
 	void viewInHexEditor();
 	void viewInGraph();
 	void viewInTypesView(std::string typeName = "");
+	void cycleILView(bool forward);
 	void copyAddressSlot();
 	void goToAddress();
 	void defineNameAtAddr(uint64_t addr);
@@ -230,25 +244,13 @@ private Q_SLOTS:
 	void makeString();
 	void changeType();
 	void undefineVariable();
+	void displayAs(const UIActionContext& context, BNIntegerDisplayType displayType) override;
 	void createStructOrInferStructureType();
 	void createArray();
 	void createStruct();
 	void createNewTypes();
 
 	size_t getStringLength(uint64_t startAddr);
-
-	void displayAsDefault();
-	void displayAsBinary();
-	void displayAsSignedOctal();
-	void displayAsUnsignedOctal();
-	void displayAsSignedDecimal();
-	void displayAsUnsignedDecimal();
-	void displayAsSignedHexadecimal();
-	void displayAsUnsignedHexadecimal();
-	void displayAsCharacterConstant();
-	void displayAsPointer();
-	void displayAsFloat();
-	void displayAsDouble();
 
 	void setInstructionHighlight(BNHighlightColor color);
 	void setBlockHighlight(BNHighlightColor color);
@@ -259,6 +261,9 @@ private Q_SLOTS:
 
 	void setStackAdjustment();
 	void setCallTypeAdjustment();
+
+	void editInstruction();
+	void instrEditDoneEvent();
 
 Q_SIGNALS:
 	void notifyResizeEvent(int width, int height);
@@ -273,6 +278,7 @@ public:
 	virtual BinaryViewRef getData() override { return m_data; }
 	void getCurrentOffsetByType(TypeRef resType, uint64_t baseAddr, uint64_t& begin, uint64_t& end, bool singleLine);
 	virtual uint64_t getCurrentOffset() override;
+	virtual UIActionContext actionContext() override;
 	virtual BNAddressRange getSelectionOffsets() override;
 	virtual BNAddressRange getSelectionForInfo() override;
 	virtual void setSelectionOffsets(BNAddressRange range) override;
